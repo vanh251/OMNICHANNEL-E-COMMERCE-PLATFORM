@@ -1,0 +1,33 @@
+server:
+  port: ${IDENTITY_SERVICE_PORT:${PORT:8081}}
+
+spring:
+  application:
+    name: identity-service
+
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:${DB_HOST:localhost}}:${POSTGRES_PORT:${DB_PORT:5432}}/${IDENTITY_DB:${DB_NAME:identity_db}}
+    username: ${POSTGRES_USER:${DB_USERNAME:postgres}}
+    password: ${POSTGRES_PASSWORD:${DB_PASSWORD:postgres}}
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    open-in-view: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: always
+
+jwt:
+  secret: ${JWT_SECRET:vanhdzvcldiojfijsiodjfojsiodjfijnenjbtuututjdnjkfn}
+  access-expiration: ${JWT_ACCESS_EXPIRATION:900000}
+  refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}
+  access-token-expiration: ${JWT_ACCESS_EXPIRATION:900000}
+  refresh-token-expiration: ${JWT_REFRESH_EXPIRATION:604800000}

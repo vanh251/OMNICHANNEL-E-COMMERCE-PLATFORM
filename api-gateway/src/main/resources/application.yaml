@@ -1,0 +1,40 @@
+server:
+  port: ${GATEWAY_PORT:8080}
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      server:
+        mvc:
+          routes:
+            - id: identity-service
+              uri: http://${IDENTITY_SERVICE_HOST:identity-service}:${IDENTITY_SERVICE_PORT:8081}
+              predicates:
+                - Path=/api/v1/auth/**, /api/v1/users/**
+            - id: product-service
+              uri: http://${PRODUCT_SERVICE_HOST:product-service}:${PRODUCT_SERVICE_PORT:8082}
+              predicates:
+                - Path=/api/v1/products/**, /api/v1/categories/**
+            - id: order-inventory-service
+              uri: http://${ORDER_SERVICE_HOST:order-inventory-service}:${ORDER_SERVICE_PORT:8083}
+              predicates:
+                - Path=/api/v1/orders/**, /api/v1/inventory/**
+            - id: payment-service
+              uri: http://${PAYMENT_SERVICE_HOST:payment-service}:${PAYMENT_SERVICE_PORT:8084}
+              predicates:
+                - Path=/api/v1/payments/**
+            - id: notification-service
+              uri: http://${NOTIFICATION_SERVICE_HOST:notification-service}:${NOTIFICATION_SERVICE_PORT:8085}
+              predicates:
+                - Path=/api/v1/notifications/**
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: always
