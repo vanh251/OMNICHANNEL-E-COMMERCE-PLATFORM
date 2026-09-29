@@ -1,0 +1,14 @@
+server:
+  port: 0
+
+spring:
+  application:
+    name: product-service-test
+
+  mongodb:
+    uri: ${SPRING_MONGODB_URI:${SPRING_DATA_MONGODB_URI:mongodb://${MONGO_ROOT_USERNAME:admin}:${MONGO_ROOT_PASSWORD:admin123}@${MONGO_HOST:localhost}:${MONGO_PORT:27017}/product_test_db?authSource=admin}}
+
+  data:
+    mongodb:
+      uri: ${SPRING_DATA_MONGODB_URI:${SPRING_MONGODB_URI:mongodb://${MONGO_ROOT_USERNAME:admin}:${MONGO_ROOT_PASSWORD:admin123}@${MONGO_HOST:localhost}:${MONGO_PORT:27017}/product_test_db?authSource=admin}}
+      auto-index-creation: true
