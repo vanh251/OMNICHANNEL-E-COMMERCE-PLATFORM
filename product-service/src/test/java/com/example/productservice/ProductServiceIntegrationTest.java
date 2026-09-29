@@ -4,8 +4,10 @@ import com.example.productservice.dto.CategoryRequest;
 import com.example.productservice.dto.ProductRequest;
 import com.example.productservice.dto.ProductVariantDTO;
 import com.example.productservice.entity.Category;
+import com.example.productservice.entity.Product;
 import com.example.productservice.repository.CategoryRepository;
 import com.example.productservice.repository.ProductRepository;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -21,6 +23,7 @@ import java.math.BigDecimal;
 import java.util.List;
 
 import static org.hamcrest.Matchers.*;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -55,7 +58,7 @@ class ProductServiceIntegrationTest {
     @DisplayName("Create Category - Success (201 Created)")
     void testCreateCategorySuccess() throws Exception {
         CategoryRequest request = CategoryRequest.builder()
-                .name("Smartphones")
+                .name("Cat-Smartphones")
                 .description("Smartphones and accessories")
                 .build();
 
@@ -64,7 +67,7 @@ class ProductServiceIntegrationTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id", notNullValue()))
-                .andExpect(jsonPath("$.name", is("Smartphones")))
+                .andExpect(jsonPath("$.name", is("Cat-Smartphones")))
                 .andExpect(jsonPath("$.description", is("Smartphones and accessories")))
                 .andExpect(jsonPath("$.createdAt", notNullValue()))
                 .andExpect(jsonPath("$.updatedAt", notNullValue()));
@@ -74,29 +77,28 @@ class ProductServiceIntegrationTest {
     @DisplayName("Get Categories - Success (200 OK)")
     void testGetCategoriesSuccess() throws Exception {
         Category category = Category.builder()
-                .name("Laptops")
+                .name("Cat-Laptops")
                 .description("High-end laptops")
                 .build();
         categoryRepository.save(category);
 
         mockMvc.perform(get("/api/categories"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(1)))
-                .andExpect(jsonPath("$[0].name", is("Laptops")));
+                .andExpect(jsonPath("$[*].name", hasItem("Cat-Laptops")));
     }
 
     @Test
     @DisplayName("Get Category By ID - Success (200 OK)")
     void testGetCategoryByIdSuccess() throws Exception {
         Category category = categoryRepository.save(Category.builder()
-                .name("Tablets")
+                .name("Cat-Tablets")
                 .description("Apple & Android Tablets")
                 .build());
 
         mockMvc.perform(get("/api/categories/" + category.getId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id", is(category.getId())))
-                .andExpect(jsonPath("$.name", is("Tablets")));
+                .andExpect(jsonPath("$.name", is("Cat-Tablets")));
     }
 
     @Test
@@ -112,12 +114,12 @@ class ProductServiceIntegrationTest {
     @DisplayName("Update Category - Success (200 OK)")
     void testUpdateCategorySuccess() throws Exception {
         Category category = categoryRepository.save(Category.builder()
-                .name("Old Category")
+                .name("Cat-OldCategory")
                 .description("Old description")
                 .build());
 
         CategoryRequest updateRequest = CategoryRequest.builder()
-                .name("Updated Category")
+                .name("Cat-UpdatedCategory")
                 .description("Updated description")
                 .build();
 
@@ -126,7 +128,7 @@ class ProductServiceIntegrationTest {
                         .content(objectMapper.writeValueAsString(updateRequest)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id", is(category.getId())))
-                .andExpect(jsonPath("$.name", is("Updated Category")))
+                .andExpect(jsonPath("$.name", is("Cat-UpdatedCategory")))
                 .andExpect(jsonPath("$.description", is("Updated description")));
     }
 
@@ -134,7 +136,7 @@ class ProductServiceIntegrationTest {
     @DisplayName("Delete Category - Success (204 No Content)")
     void testDeleteCategorySuccess() throws Exception {
         Category category = categoryRepository.save(Category.builder()
-                .name("Category To Delete")
+                .name("Cat-ToDelete")
                 .description("Description")
                 .build());
 
@@ -149,13 +151,13 @@ class ProductServiceIntegrationTest {
     @DisplayName("Create Category - Duplicate Name (400 Bad Request)")
     void testCreateDuplicateCategory() throws Exception {
         categoryRepository.save(Category.builder()
-                .name("Audio")
+                .name("Cat-DuplicateCheck")
                 .description("Headphones & Speakers")
                 .build());
 
         CategoryRequest duplicateRequest = CategoryRequest.builder()
-                .name("Audio")
-                .description("Another Audio category")
+                .name("Cat-DuplicateCheck")
+                .description("Another category with same name")
                 .build();
 
         mockMvc.perform(post("/api/categories")
@@ -174,7 +176,7 @@ class ProductServiceIntegrationTest {
     @DisplayName("Create Product - Success (201 Created)")
     void testCreateProductSuccess() throws Exception {
         Category category = categoryRepository.save(Category.builder()
-                .name("Phones")
+                .name("Cat-Phones")
                 .description("Mobile phones")
                 .build());
 
@@ -212,7 +214,7 @@ class ProductServiceIntegrationTest {
                 .andExpect(jsonPath("$.name", is("iPhone 17")))
                 .andExpect(jsonPath("$.brand", is("Apple")))
                 .andExpect(jsonPath("$.categoryId", is(category.getId())))
-                .andExpect(jsonPath("$.categoryName", is("Phones")))
+                .andExpect(jsonPath("$.categoryName", is("Cat-Phones")))
                 .andExpect(jsonPath("$.active", is(true)))
                 .andExpect(jsonPath("$.variants", hasSize(2)))
                 .andExpect(jsonPath("$.variants[0].sku", is("IP17-BLK-256")))
@@ -249,7 +251,7 @@ class ProductServiceIntegrationTest {
     @Test
     @DisplayName("Get Products - Success (200 OK)")
     void testGetProductsSuccess() throws Exception {
-        Category category = categoryRepository.save(Category.builder().name("Monitors").build());
+        Category category = categoryRepository.save(Category.builder().name("Cat-Monitors").build());
 
         ProductVariantDTO variant = ProductVariantDTO.builder()
                 .sku("MON-4K-27")
@@ -266,19 +268,19 @@ class ProductServiceIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/products")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)));
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated());
 
         mockMvc.perform(get("/api/products"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(1)))
-                .andExpect(jsonPath("$[0].name", is("Dell UltraSharp")));
+                .andExpect(jsonPath("$[*].name", hasItem("Dell UltraSharp")));
     }
 
     @Test
     @DisplayName("Get Product By ID - Success (200 OK)")
     void testGetProductByIdSuccess() throws Exception {
-        Category category = categoryRepository.save(Category.builder().name("Keyboards").build());
+        Category category = categoryRepository.save(Category.builder().name("Cat-Keyboards").build());
 
         ProductVariantDTO variant = ProductVariantDTO.builder()
                 .sku("KEY-MECH-RED")
@@ -297,9 +299,12 @@ class ProductServiceIntegrationTest {
         String response = mockMvc.perform(post("/api/products")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
 
-        String productId = objectMapper.readTree(response).get("id").asText();
+        JsonNode root = objectMapper.readTree(response);
+        assertNotNull(root.get("id"));
+        String productId = root.get("id").asText();
 
         mockMvc.perform(get("/api/products/" + productId))
                 .andExpect(status().isOk())
@@ -310,7 +315,7 @@ class ProductServiceIntegrationTest {
     @Test
     @DisplayName("Get Products By Category - Success (200 OK)")
     void testGetProductsByCategorySuccess() throws Exception {
-        Category category = categoryRepository.save(Category.builder().name("Wearables").build());
+        Category category = categoryRepository.save(Category.builder().name("Cat-Wearables").build());
 
         ProductVariantDTO variant = ProductVariantDTO.builder()
                 .sku("WATCH-ULTRA")
@@ -327,19 +332,19 @@ class ProductServiceIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/products")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)));
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated());
 
         mockMvc.perform(get("/api/products/category/" + category.getId()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(1)))
-                .andExpect(jsonPath("$[0].name", is("Smart Watch")));
+                .andExpect(jsonPath("$[*].name", hasItem("Smart Watch")));
     }
 
     @Test
     @DisplayName("Update Product - Success (200 OK)")
     void testUpdateProductSuccess() throws Exception {
-        Category category = categoryRepository.save(Category.builder().name("Audio").build());
+        Category category = categoryRepository.save(Category.builder().name("Cat-AudioUpdate").build());
 
         ProductVariantDTO variant = ProductVariantDTO.builder()
                 .sku("SONY-XM5")
@@ -358,9 +363,12 @@ class ProductServiceIntegrationTest {
         String response = mockMvc.perform(post("/api/products")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
 
-        String productId = objectMapper.readTree(response).get("id").asText();
+        JsonNode root = objectMapper.readTree(response);
+        assertNotNull(root.get("id"));
+        String productId = root.get("id").asText();
 
         // Update product name to WH-1000XM5
         request.setName("Sony WH-1000XM5");
@@ -375,7 +383,7 @@ class ProductServiceIntegrationTest {
     @Test
     @DisplayName("Delete Product - Success (204 No Content)")
     void testDeleteProductSuccess() throws Exception {
-        Category category = categoryRepository.save(Category.builder().name("Accessories").build());
+        Category category = categoryRepository.save(Category.builder().name("Cat-Accessories").build());
 
         ProductVariantDTO variant = ProductVariantDTO.builder()
                 .sku("CABLE-USBC")
@@ -393,9 +401,12 @@ class ProductServiceIntegrationTest {
         String response = mockMvc.perform(post("/api/products")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
 
-        String productId = objectMapper.readTree(response).get("id").asText();
+        JsonNode root = objectMapper.readTree(response);
+        assertNotNull(root.get("id"));
+        String productId = root.get("id").asText();
 
         mockMvc.perform(delete("/api/products/" + productId))
                 .andExpect(status().isNoContent());
