@@ -20,7 +20,10 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
+import com.example.orderinventoryservice.event.EventPublisher;
+import com.example.orderinventoryservice.event.OrderCreatedEvent;
 
 @Slf4j
 @Service
@@ -30,6 +33,7 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final ProductServiceClient productServiceClient;
     private final InventoryService inventoryService;
+    private final EventPublisher eventPublisher;
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
 
@@ -102,6 +106,31 @@ public class OrderService {
         for (OrderItem item : savedOrder.getItems()) {
             inventoryService.reserveStock(savedOrder.getId(), item.getSku(), item.getQuantity());
         }
+
+        // Publish OrderCreatedEvent
+        OrderCreatedEvent.OrderCreatedEventData eventData = OrderCreatedEvent.OrderCreatedEventData.builder()
+                .orderId(savedOrder.getId().toString())
+                .customerId(userId.toString())
+                .totalAmount(savedOrder.getTotalAmount())
+                .currency("VND")
+                .items(savedOrder.getItems().stream()
+                        .map(item -> OrderCreatedEvent.OrderItemData.builder()
+                                .productId(item.getProductId())
+                                .sku(item.getSku())
+                                .quantity(item.getQuantity())
+                                .unitPrice(item.getUnitPrice())
+                                .build())
+                        .collect(Collectors.toList()))
+                .build();
+
+        OrderCreatedEvent event = OrderCreatedEvent.builder()
+                .eventId(UUID.randomUUID().toString())
+                .eventType("OrderCreatedEvent")
+                .timestamp(LocalDateTime.now().toString())
+                .data(eventData)
+                .build();
+
+        eventPublisher.publishOrderCreatedEvent(event);
 
         log.info("Created order with id={}, orderCode={}, userId={}", savedOrder.getId(), orderCode, userId);
 
