@@ -2,7 +2,6 @@ server:
   port: ${PAYMENT_SERVICE_PORT:8084}
 
 spring:
-
   application:
     name: payment-service
 
@@ -14,6 +13,7 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
+    show-sql: false
     open-in-view: false
 
   rabbitmq:
@@ -21,7 +21,12 @@ spring:
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USERNAME:admin}
     password: ${RABBITMQ_PASSWORD:rabbit123}
-    virtual-host: ${RABBITMQ_VHOST:/}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
 
 management:
   endpoints:
