@@ -14,7 +14,7 @@ import java.math.BigDecimal;
  * </p>
  */
 @Slf4j
-@Service
+// @Service // Removed in favor of ProductServiceClientGrpcImpl
 public class ProductServiceClientStub implements ProductServiceClient {
 
     @Override
