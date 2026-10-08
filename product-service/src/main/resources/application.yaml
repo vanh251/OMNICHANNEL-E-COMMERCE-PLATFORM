@@ -27,3 +27,7 @@ management:
   endpoint:
     health:
       show-details: always
+
+grpc:
+  server:
+    port: ${PRODUCT_GRPC_PORT:9090}

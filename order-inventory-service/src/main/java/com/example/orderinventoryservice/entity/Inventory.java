@@ -17,7 +17,7 @@ public class Inventory {
     private Long id;
 
     @Column(nullable = false)
-    private Long productId;
+    private String productId;
 
     @Column(nullable = false, unique = true)
     private String sku;

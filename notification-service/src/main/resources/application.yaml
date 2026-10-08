@@ -6,17 +6,17 @@ spring:
     name: notification-service
 
   rabbitmq:
-    host: ${RABBITMQ_HOST:rabbitmq}
+    host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USERNAME:admin}
     password: ${RABBITMQ_PASSWORD:rabbit123}
     virtual-host: ${RABBITMQ_VHOST:/}
 
   mongodb:
-    uri: mongodb://${MONGO_ROOT_USERNAME:admin}:${MONGO_ROOT_PASSWORD:admin123}@${MONGO_HOST:mongodb}:${MONGO_PORT:27017}/notification_db?authSource=admin
+    uri: mongodb://${MONGO_ROOT_USERNAME:admin}:${MONGO_ROOT_PASSWORD:admin123}@${MONGO_HOST:localhost}:${MONGO_PORT:27017}/notification_db?authSource=admin
   data:
     mongodb:
-      uri: mongodb://${MONGO_ROOT_USERNAME:admin}:${MONGO_ROOT_PASSWORD:admin123}@${MONGO_HOST:mongodb}:${MONGO_PORT:27017}/notification_db?authSource=admin
+      uri: mongodb://${MONGO_ROOT_USERNAME:admin}:${MONGO_ROOT_PASSWORD:admin123}@${MONGO_HOST:localhost}:${MONGO_PORT:27017}/notification_db?authSource=admin
 
 management:
   endpoints:

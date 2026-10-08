@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package product;
+
+option java_multiple_files = true;
+option java_package = "com.example.productservice.grpc";
+option java_outer_classname = "ProductProto";
+
+service ProductGrpcService {
+    rpc VerifyProductDetails(VerifyProductRequest) returns (VerifyProductResponse);
+}
+
+message VerifyProductRequest {
+    string sku = 1;
+}
+
+message VerifyProductResponse {
+    bool valid = 1;
+    string productId = 2;
+    string name = 3;
+    double price = 4;
+    int32 availableStock = 5;
+    string errorMessage = 6;
+}

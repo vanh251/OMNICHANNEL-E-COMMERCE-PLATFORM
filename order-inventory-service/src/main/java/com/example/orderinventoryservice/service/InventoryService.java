@@ -22,7 +22,7 @@ public class InventoryService {
 
     @Transactional
     public void reserveStock(Long orderId, String sku, Integer quantity) {
-        Inventory inventory = inventoryRepository.findBySku(sku)
+        Inventory inventory = inventoryRepository.findBySkuForUpdate(sku)
                 .orElseThrow(() -> new InsufficientStockException("Product SKU not found in inventory: " + sku));
 
         if (inventory.getAvailableStock() < quantity) {
@@ -54,7 +54,7 @@ public class InventoryService {
         
         for (InventoryReservation reservation : reservations) {
             if (reservation.getStatus() == InventoryReservation.ReservationStatus.PENDING) {
-                Inventory inventory = inventoryRepository.findBySku(reservation.getSku()).orElse(null);
+                Inventory inventory = inventoryRepository.findBySkuForUpdate(reservation.getSku()).orElse(null);
                 if (inventory != null) {
                     inventory.setReservedStock(inventory.getReservedStock() - reservation.getQuantity());
                     inventory.setAvailableStock(inventory.getTotalStock() - inventory.getReservedStock());

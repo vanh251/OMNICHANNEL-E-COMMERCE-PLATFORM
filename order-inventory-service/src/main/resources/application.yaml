@@ -47,3 +47,9 @@ management:
   endpoint:
     health:
       show-details: always
+
+grpc:
+  client:
+    product-service:
+      address: 'static://${PRODUCT_SERVICE_HOST:localhost}:${PRODUCT_GRPC_PORT:9090}'
+      negotiation-type: plaintext

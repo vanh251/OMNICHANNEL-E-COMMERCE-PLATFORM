@@ -26,6 +26,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -62,6 +63,12 @@ class OrderControllerIntegrationTest {
     @Autowired
     private InventoryRepository inventoryRepository;
 
+    @MockitoBean
+    private ProductServiceClient productServiceClient;
+
+    @MockitoBean
+    private com.example.orderinventoryservice.event.EventPublisher eventPublisher;
+
     private static final Long USER_ID = 100L;
     private static final String USER_EMAIL = "testuser@example.com";
 
@@ -83,7 +90,7 @@ class OrderControllerIntegrationTest {
 
         // Create dummy inventory for tests
         inventoryRepository.save(Inventory.builder()
-                .productId(1L)
+                .productId("1")
                 .sku("IP17-BLK-256")
                 .totalStock(100)
                 .reservedStock(0)
@@ -91,7 +98,7 @@ class OrderControllerIntegrationTest {
                 .build());
 
         inventoryRepository.save(Inventory.builder()
-                .productId(2L)
+                .productId("2")
                 .sku("IP17-WHT-128")
                 .totalStock(50)
                 .reservedStock(0)
@@ -99,7 +106,7 @@ class OrderControllerIntegrationTest {
                 .build());
                 
         inventoryRepository.save(Inventory.builder()
-                .productId(3L)
+                .productId("3")
                 .sku("SKU-001")
                 .totalStock(10)
                 .reservedStock(0)
@@ -107,12 +114,19 @@ class OrderControllerIntegrationTest {
                 .build());
                 
         inventoryRepository.save(Inventory.builder()
-                .productId(4L)
+                .productId("4")
                 .sku("SKU-000")
                 .totalStock(10)
                 .reservedStock(0)
                 .availableStock(10)
                 .build());
+                
+        // Mock gRPC client behavior
+        org.mockito.Mockito.when(productServiceClient.getProductInfo(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()))
+                .thenAnswer(invocation -> {
+                    String sku = invocation.getArgument(1);
+                    return new ProductServiceClient.ProductInfo("Product " + sku, java.math.BigDecimal.valueOf(100000));
+                });
     }
 
     @Test
