@@ -7,7 +7,7 @@ option java_package = "com.example.productservice.grpc";
 option java_outer_classname = "ProductProto";
 
 service ProductGrpcService {
-    rpc verifyProductDetails(VerifyProductRequest) returns (VerifyProductResponse);
+    rpc VerifyProductDetails(VerifyProductRequest) returns (VerifyProductResponse);
 }
 
 message VerifyProductRequest {

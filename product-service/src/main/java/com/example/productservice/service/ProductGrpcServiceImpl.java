@@ -9,24 +9,21 @@ import io.grpc.stub.StreamObserver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.devh.boot.grpc.server.service.GrpcService;
-import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.data.mongodb.core.query.Criteria;
-import org.springframework.data.mongodb.core.query.Query;
+import com.example.productservice.repository.ProductRepository;
 
 @Slf4j
 @GrpcService
 @RequiredArgsConstructor
 public class ProductGrpcServiceImpl extends ProductGrpcServiceGrpc.ProductGrpcServiceImplBase {
 
-    private final MongoTemplate mongoTemplate;
+    private final ProductRepository productRepository;
 
     @Override
     public void verifyProductDetails(VerifyProductRequest request, StreamObserver<VerifyProductResponse> responseObserver) {
         String sku = request.getSku();
         log.info("Received gRPC request to verify product SKU: {}", sku);
 
-        Query query = new Query(Criteria.where("variants.sku").is(sku));
-        Product product = mongoTemplate.findOne(query, Product.class);
+        Product product = productRepository.findByVariantSku(sku).orElse(null);
 
         if (product != null && product.isActive()) {
             ProductVariant targetVariant = product.getVariants().stream()
