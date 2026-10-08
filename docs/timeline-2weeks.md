@@ -82,7 +82,11 @@ Notification
 | Load Test                | k6                      |
 | API Documentation        | Swagger / OpenAPI       |
 
-> **Phạm vi 2 tuần:** Không ưu tiên Elasticsearch, Payment Gateway thật, Kubernetes, Jaeger/Zipkin hoặc các thành phần mở rộng nếu chức năng cốt lõi chưa hoàn thành.
+> **Phạm vi 2 tuần (MVP Scope):** Các thành phần sau đây là yêu cầu bắt buộc theo đề tài gốc cho môi trường production, nhưng được phép hoãn sang **Phase 2** nếu chức năng cốt lõi chưa hoàn thành trong 14 ngày:
+> - **Elasticsearch** → Tạm dùng MongoDB text index thay thế
+> - **Payment Gateway thật** (VNPay, MoMo, Stripe) → Dùng Mock Payment
+> - **Jaeger/Zipkin** (Distributed Tracing) → Prometheus + Grafana + Loki là bắt buộc
+> - **Kubernetes** → Docker Compose trên VPS là đủ cho MVP
 
 ---
 
@@ -586,7 +590,7 @@ SUCCESS FAILED
 ✅ Mock Payment
 ```
 
-> Không cần tích hợp VNPay/MoMo thật trong phiên bản 2 tuần.
+> **Lưu ý:** Đây là Mock Payment cho phiên bản MVP 2 tuần. Theo yêu cầu đề tài gốc, môi trường production cần tích hợp đầy đủ các cổng thanh toán thật (VNPay, MoMo, ZaloPay, Stripe). Tích hợp Payment Gateway thật sẽ được thực hiện trong **Phase 2** sau khi core flow ổn định.
 
 ---
 
