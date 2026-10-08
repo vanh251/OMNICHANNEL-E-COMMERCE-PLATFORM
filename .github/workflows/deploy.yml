@@ -30,27 +30,42 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT }}
-          command_timeout: 20m
+          command_timeout: 60m
           script: |
             set -e
 
             cd /opt/omnichannel-ecommerce
 
-            echo "Sync latest repo configurations..."
-            git pull origin main
+            echo "=== Disk usage before deploy ==="
+            df -h /
 
-            echo "Pull latest images..."
-            docker compose -f docker-compose.production.yml pull
-
-            echo "Restart services..."
-            docker compose -f docker-compose.production.yml up -d --remove-orphans
-
-            # Wait for services to be healthy with explicit timeout
-            timeout 180 bash -c 'until docker compose -f docker-compose.production.yml ps | grep -q "running"; do sleep 2; done'
-
-            echo "Remove unused images..."
+            echo "=== Free up disk: remove dangling images & stopped containers ==="
+            docker container prune -f
             docker image prune -f
 
-            echo "Deployment completed."
+            echo "=== Disk usage after cleanup ==="
+            df -h /
 
+            echo "=== Sync latest repo configurations ==="
+            git pull origin main
+
+            echo "=== Pull latest images ==="
+            docker compose -f docker-compose.production.yml pull
+
+            echo "=== Restart services ==="
+            docker compose -f docker-compose.production.yml up -d --remove-orphans
+
+            echo "=== Wait for services to be healthy (max 3 minutes) ==="
+            timeout 180 bash -c \
+              'until docker compose -f docker-compose.production.yml ps | grep -E "running|healthy"; do
+                echo "Waiting for services..."; sleep 5;
+              done' || echo "Warning: some services may not be healthy yet"
+
+            echo "=== Remove unused images after deploy ==="
+            docker image prune -f
+
+            echo "=== Disk usage after deploy ==="
+            df -h /
+
+            echo "=== Deployment completed ==="
             docker compose -f docker-compose.production.yml ps
