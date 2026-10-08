@@ -10,6 +10,8 @@ import com.example.orderinventoryservice.entity.OrderStatusHistory;
 import com.example.orderinventoryservice.repository.OrderItemRepository;
 import com.example.orderinventoryservice.repository.OrderRepository;
 import com.example.orderinventoryservice.repository.OrderStatusHistoryRepository;
+import com.example.orderinventoryservice.repository.InventoryRepository;
+import com.example.orderinventoryservice.entity.Inventory;
 import com.example.orderinventoryservice.security.JwtUserPrincipal;
 import com.example.orderinventoryservice.service.ProductServiceClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -57,6 +59,9 @@ class OrderControllerIntegrationTest {
     @Autowired
     private OrderStatusHistoryRepository orderStatusHistoryRepository;
 
+    @Autowired
+    private InventoryRepository inventoryRepository;
+
     private static final Long USER_ID = 100L;
     private static final String USER_EMAIL = "testuser@example.com";
 
@@ -74,6 +79,40 @@ class OrderControllerIntegrationTest {
         orderItemRepository.deleteAll();
         orderStatusHistoryRepository.deleteAll();
         orderRepository.deleteAll();
+        inventoryRepository.deleteAll();
+
+        // Create dummy inventory for tests
+        inventoryRepository.save(Inventory.builder()
+                .productId(1L)
+                .sku("IP17-BLK-256")
+                .totalStock(100)
+                .reservedStock(0)
+                .availableStock(100)
+                .build());
+
+        inventoryRepository.save(Inventory.builder()
+                .productId(2L)
+                .sku("IP17-WHT-128")
+                .totalStock(50)
+                .reservedStock(0)
+                .availableStock(50)
+                .build());
+                
+        inventoryRepository.save(Inventory.builder()
+                .productId(3L)
+                .sku("SKU-001")
+                .totalStock(10)
+                .reservedStock(0)
+                .availableStock(10)
+                .build());
+                
+        inventoryRepository.save(Inventory.builder()
+                .productId(4L)
+                .sku("SKU-000")
+                .totalStock(10)
+                .reservedStock(0)
+                .availableStock(10)
+                .build());
     }
 
     @Test

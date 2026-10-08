@@ -29,6 +29,7 @@ public class OrderService {
 
     private final OrderRepository orderRepository;
     private final ProductServiceClient productServiceClient;
+    private final InventoryService inventoryService;
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
 
@@ -91,6 +92,12 @@ public class OrderService {
         order.addStatusHistory(statusHistory);
 
         Order savedOrder = orderRepository.save(order);
+        
+        // Reserve stock
+        for (OrderItem item : savedOrder.getItems()) {
+            inventoryService.reserveStock(savedOrder.getId(), item.getSku(), item.getQuantity());
+        }
+
         log.info("Created order with id={}, orderCode={}, userId={}", savedOrder.getId(), orderCode, userId);
 
         return mapToResponse(savedOrder);
@@ -136,6 +143,9 @@ public class OrderService {
         order.addStatusHistory(statusHistory);
 
         order.setStatus(OrderStatus.CANCELLED);
+
+        // Release stock if order is pending
+        inventoryService.releaseStock(orderId);
 
         Order savedOrder = orderRepository.save(order);
         log.info("Cancelled order id={}, previousStatus={}", orderId, currentStatus);

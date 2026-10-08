@@ -1029,10 +1029,11 @@ You are working on the Omnichannel E-Commerce Platform.
 Before coding:
 1. Read CODING_CONVENTION.md.
 2. Read README.md and relevant service documentation.
-3. Inspect the existing code structure.
-4. Identify existing patterns before creating new code.
-5. Preserve Java 17 and the existing Spring Boot architecture.
-6. Do not change API contracts, database ownership, ports, dependencies,
+3. Read srs.md, api_vi.md, architecture_vi.md, event_vi.md, timeline_vi.md if exists.
+4. Inspect the existing code structure.
+5. Identify existing patterns before creating new code.
+6. Preserve Java 17 and the existing Spring Boot architecture.
+7. Do not change API contracts, database ownership, ports, dependencies,
    messaging contracts, or architecture unless explicitly requested.
 
 While coding:

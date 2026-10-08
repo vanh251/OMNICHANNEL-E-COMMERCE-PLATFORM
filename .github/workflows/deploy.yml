@@ -30,6 +30,7 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT }}
+          command_timeout: 20m
           script: |
             set -e
 
@@ -43,6 +44,9 @@ jobs:
 
             echo "Restart services..."
             docker compose -f docker-compose.production.yml up -d --remove-orphans
+
+            # Wait for services to be healthy with explicit timeout
+            timeout 180 bash -c 'until docker compose -f docker-compose.production.yml ps | grep -q "running"; do sleep 2; done'
 
             echo "Remove unused images..."
             docker image prune -f
