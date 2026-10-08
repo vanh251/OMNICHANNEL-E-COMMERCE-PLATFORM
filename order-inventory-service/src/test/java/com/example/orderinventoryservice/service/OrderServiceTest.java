@@ -9,6 +9,7 @@ import com.example.orderinventoryservice.exception.InvalidOrderStatusException;
 import com.example.orderinventoryservice.exception.OrderNotFoundException;
 import com.example.orderinventoryservice.exception.UnauthorizedOrderAccessException;
 import com.example.orderinventoryservice.repository.OrderRepository;
+import com.example.orderinventoryservice.event.EventPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -41,6 +42,9 @@ class OrderServiceTest {
 
     @Mock
     private InventoryService inventoryService;
+
+    @Mock
+    private EventPublisher eventPublisher;
 
     @InjectMocks
     private OrderService orderService;

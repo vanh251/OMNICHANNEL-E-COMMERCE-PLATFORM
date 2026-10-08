@@ -66,6 +66,9 @@ class OrderControllerIntegrationTest {
     @MockitoBean
     private ProductServiceClient productServiceClient;
 
+    @MockitoBean
+    private com.example.orderinventoryservice.event.EventPublisher eventPublisher;
+
     private static final Long USER_ID = 100L;
     private static final String USER_EMAIL = "testuser@example.com";
 

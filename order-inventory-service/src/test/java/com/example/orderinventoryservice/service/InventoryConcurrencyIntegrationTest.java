@@ -31,6 +31,9 @@ public class InventoryConcurrencyIntegrationTest {
     @MockitoBean
     private ProductServiceClient productServiceClient; // To satisfy app context
 
+    @MockitoBean
+    private com.example.orderinventoryservice.event.EventPublisher eventPublisher;
+
     private static final String FLASH_SKU = "FLASH-SKU-001";
 
     @BeforeEach
