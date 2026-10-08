@@ -64,6 +64,11 @@ public class OrderService {
             ProductServiceClient.ProductInfo productInfo =
                     productServiceClient.getProductInfo(itemRequest.getProductId(), itemRequest.getSku());
 
+            if (productInfo == null) {
+                log.error("Failed to retrieve product info via gRPC for sku={}", itemRequest.getSku());
+                throw new IllegalArgumentException("Product not found, inactive, or service unavailable for SKU: " + itemRequest.getSku());
+            }
+
             BigDecimal unitPrice = productInfo.unitPrice();
             BigDecimal subtotal = unitPrice.multiply(BigDecimal.valueOf(itemRequest.getQuantity()));
 
