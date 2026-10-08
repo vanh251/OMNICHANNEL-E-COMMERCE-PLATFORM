@@ -183,6 +183,8 @@ services:
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
       RABBITMQ_VHOST: ${RABBITMQ_VHOST:-/}
       JWT_SECRET: ${JWT_SECRET}
+      PRODUCT_SERVICE_HOST: product-service
+      PRODUCT_GRPC_PORT: 9090
     ports:
       - "${ORDER_SERVICE_PORT:-8083}:8083"
     depends_on:

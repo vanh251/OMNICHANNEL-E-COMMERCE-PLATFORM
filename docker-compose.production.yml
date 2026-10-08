@@ -177,6 +177,8 @@ services:
       RABBITMQ_USERNAME: ${RABBITMQ_USERNAME}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
       RABBITMQ_VHOST: ${RABBITMQ_VHOST:-/}
+      PRODUCT_SERVICE_HOST: product-service
+      PRODUCT_GRPC_PORT: 9090
     depends_on:
       postgres:
         condition: service_healthy
