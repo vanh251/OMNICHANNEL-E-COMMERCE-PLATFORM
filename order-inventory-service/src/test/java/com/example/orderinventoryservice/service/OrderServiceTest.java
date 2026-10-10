@@ -365,4 +365,35 @@ class OrderServiceTest {
             assertThat(lastHistory.getNewStatus()).isEqualTo("CANCELLED");
         }
     }
+
+    @Nested
+    class PaymentSagaTests {
+        @Test
+        void paymentSuccessConfirmsOnce() {
+            Order order = createMockOrder(OrderStatus.PENDING);
+            when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
+
+            orderService.confirmPayment(1L);
+            orderService.confirmPayment(1L);
+
+            assertThat(order.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
+            assertThat(order.getStatusHistories()).hasSize(2);
+            verify(inventoryService).confirmStock(1L);
+            verify(orderRepository).save(order);
+        }
+
+        @Test
+        void paymentFailureReleasesAndCancelsOnce() {
+            Order order = createMockOrder(OrderStatus.PENDING);
+            when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
+
+            orderService.failPayment(1L);
+            orderService.failPayment(1L);
+
+            assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+            assertThat(order.getStatusHistories()).hasSize(2);
+            verify(inventoryService).releaseStock(1L);
+            verify(eventPublisher).publishOrderCancelledEvent(any());
+        }
+    }
 }

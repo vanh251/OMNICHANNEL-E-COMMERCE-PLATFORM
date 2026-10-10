@@ -1,7 +1,10 @@
 package com.example.notificationservice.consumer;
 
 import com.example.notificationservice.config.RabbitMQConfig;
-import com.example.notificationservice.dto.OrderCreatedEvent;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.amqp.core.Message;
+import java.io.IOException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
@@ -9,15 +12,19 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Component
 public class NotificationConsumer {
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @RabbitListener(queues = RabbitMQConfig.QUEUE_NAME)
-    public void consumeOrderCreatedEvent(OrderCreatedEvent event) {
-        log.info("Received OrderCreatedEvent for orderId: {}", event.getData().getOrderId());
-        
-        // Mock Email as per Day 8 requirements
-        System.out.println("==================================================");
-        System.out.println("[EMAIL]");
-        System.out.println("Your order #" + event.getData().getOrderId() + " has been created.");
-        System.out.println("==================================================");
+    public void consumeEvent(Message message) throws IOException {
+        JsonNode event = objectMapper.readTree(message.getBody());
+        String orderId = event.path("data").path("orderId").asText();
+        String text = switch (event.path("eventType").asText()) {
+            case "OrderCreatedEvent" -> "Your order #" + orderId + " has been created.";
+            case "PaymentSucceededEvent" -> "Payment succeeded for order #" + orderId + ".";
+            case "PaymentFailedEvent" -> "Payment failed for order #" + orderId + ".";
+            case "OrderCancelledEvent" -> "Your order #" + orderId + " has been cancelled.";
+            default -> throw new IllegalArgumentException("Unknown notification event");
+        };
+        log.info("[EMAIL] {}", text);
     }
 }
