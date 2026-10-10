@@ -66,4 +66,20 @@ public class InventoryService {
             }
         }
     }
+
+    @Transactional
+    public void confirmStock(Long orderId) {
+        for (InventoryReservation reservation : inventoryReservationRepository.findByOrderId(orderId)) {
+            if (reservation.getStatus() == InventoryReservation.ReservationStatus.PENDING) {
+                Inventory inventory = inventoryRepository.findBySkuForUpdate(reservation.getSku())
+                        .orElseThrow(() -> new IllegalStateException("Missing inventory for " + reservation.getSku()));
+                inventory.setReservedStock(inventory.getReservedStock() - reservation.getQuantity());
+                inventory.setTotalStock(inventory.getTotalStock() - reservation.getQuantity());
+                inventory.setAvailableStock(inventory.getTotalStock() - inventory.getReservedStock());
+                inventoryRepository.save(inventory);
+                reservation.setStatus(InventoryReservation.ReservationStatus.CONFIRMED);
+                inventoryReservationRepository.save(reservation);
+            }
+        }
+    }
 }
