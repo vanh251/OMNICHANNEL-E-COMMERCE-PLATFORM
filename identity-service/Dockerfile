@@ -15,6 +15,8 @@ RUN --mount=type=cache,target=/root/.gradle ./gradlew bootJar -x test --no-daemo
 FROM eclipse-temurin:17-jre
 WORKDIR /app
 
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
 COPY --from=builder /app/build/libs/*.jar app.jar
 
 EXPOSE 8081
