@@ -6,11 +6,15 @@ import com.example.paymentservice.entity.Payment;
 import com.example.paymentservice.entity.PaymentStatus;
 import com.example.paymentservice.exception.PaymentNotFoundException;
 import com.example.paymentservice.repository.PaymentRepository;
+import com.example.paymentservice.repository.OutboxEventRepository;
+import com.example.paymentservice.entity.OutboxEvent;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
@@ -25,6 +29,12 @@ public class PaymentServiceTest {
 
     @Mock
     private PaymentRepository paymentRepository;
+
+    @Mock
+    private OutboxEventRepository outboxEventRepository;
+
+    @Spy
+    private ObjectMapper objectMapper = new ObjectMapper();
 
     @InjectMocks
     private PaymentService paymentService;
@@ -67,6 +77,11 @@ public class PaymentServiceTest {
         assertTrue(response.getTransactionId().startsWith("TXN-"));
         
         verify(paymentRepository, times(1)).save(any(Payment.class));
+        verify(outboxEventRepository).save(any());
+        var captor = org.mockito.ArgumentCaptor.forClass(OutboxEvent.class);
+        verify(outboxEventRepository).save(captor.capture());
+        assertEquals("payment.succeeded", captor.getValue().getRoutingKey());
+        assertTrue(captor.getValue().getPayload().contains("PaymentSucceededEvent"));
     }
 
     @Test
@@ -85,6 +100,22 @@ public class PaymentServiceTest {
         assertNull(response.getTransactionId());
         
         verify(paymentRepository, times(1)).save(any(Payment.class));
+        verify(outboxEventRepository).save(any());
+        var captor = org.mockito.ArgumentCaptor.forClass(OutboxEvent.class);
+        verify(outboxEventRepository).save(captor.capture());
+        assertEquals("payment.failed", captor.getValue().getRoutingKey());
+        assertTrue(captor.getValue().getPayload().contains("PaymentFailedEvent"));
+    }
+
+    @Test
+    void repeatedOrderCreatedDoesNotCreateAnotherPaymentOrEvent() {
+        when(paymentRepository.findByOrderId("ORD-123")).thenReturn(Optional.of(payment));
+
+        PaymentResponse response = paymentService.createPayment(paymentRequest);
+
+        assertEquals(PaymentStatus.SUCCESS, response.getStatus());
+        verify(paymentRepository, never()).save(any());
+        verifyNoInteractions(outboxEventRepository);
     }
 
     @Test

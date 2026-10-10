@@ -182,9 +182,54 @@ public class OrderService {
         inventoryService.releaseStock(orderId);
 
         Order savedOrder = orderRepository.save(order);
+        eventPublisher.publishOrderCancelledEvent(cancellationEvent(savedOrder, "CUSTOMER_CANCELLED"));
         log.info("Cancelled order id={}, previousStatus={}", orderId, currentStatus);
 
         return mapToResponse(savedOrder);
+    }
+
+    @Transactional
+    public void confirmPayment(Long orderId) {
+        Order order = orderRepository.findByIdForUpdate(orderId)
+                .orElseThrow(() -> new OrderNotFoundException("Order not found with id: " + orderId));
+        if (order.getStatus() == OrderStatus.CONFIRMED) return;
+        if (order.getStatus() != OrderStatus.PENDING) {
+            log.warn("Ignoring payment success for orderId={} in status={}", orderId, order.getStatus());
+            return;
+        }
+        inventoryService.confirmStock(orderId);
+        changeStatus(order, OrderStatus.CONFIRMED, "PAYMENT");
+        orderRepository.save(order);
+    }
+
+    @Transactional
+    public void failPayment(Long orderId) {
+        Order order = orderRepository.findByIdForUpdate(orderId)
+                .orElseThrow(() -> new OrderNotFoundException("Order not found with id: " + orderId));
+        if (order.getStatus() == OrderStatus.CANCELLED) return;
+        if (order.getStatus() != OrderStatus.PENDING) {
+            log.warn("Ignoring payment failure for orderId={} in status={}", orderId, order.getStatus());
+            return;
+        }
+        inventoryService.releaseStock(orderId);
+        changeStatus(order, OrderStatus.CANCELLED, "PAYMENT");
+        orderRepository.save(order);
+        eventPublisher.publishOrderCancelledEvent(cancellationEvent(order, "PAYMENT_FAILED"));
+    }
+
+    private void changeStatus(Order order, OrderStatus status, String actor) {
+        order.addStatusHistory(OrderStatusHistory.builder()
+                .oldStatus(order.getStatus()).newStatus(status)
+                .changedAt(LocalDateTime.now()).changedBy(actor).build());
+        order.setStatus(status);
+    }
+
+    private java.util.Map<String, Object> cancellationEvent(Order order, String reason) {
+        return java.util.Map.of("eventId", UUID.randomUUID().toString(),
+                "eventType", "OrderCancelledEvent", "timestamp", java.time.Instant.now().toString(),
+                "data", java.util.Map.of("orderId", order.getId().toString(),
+                        "customerId", order.getUserId().toString(), "reason", reason,
+                        "cancelledAt", java.time.Instant.now().toString()));
     }
 
     // ==================== Helper Methods ====================

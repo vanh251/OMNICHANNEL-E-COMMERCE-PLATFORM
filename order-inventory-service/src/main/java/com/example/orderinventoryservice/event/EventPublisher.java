@@ -1,9 +1,11 @@
 package com.example.orderinventoryservice.event;
 
-import com.example.orderinventoryservice.config.RabbitMQConfig;
+import com.example.orderinventoryservice.entity.OutboxEvent;
+import com.example.orderinventoryservice.repository.OutboxEventRepository;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
 
 @Slf4j
@@ -11,10 +13,22 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class EventPublisher {
 
-    private final RabbitTemplate rabbitTemplate;
+    private final OutboxEventRepository outboxEventRepository;
+    private final ObjectMapper objectMapper;
 
     public void publishOrderCreatedEvent(OrderCreatedEvent event) {
-        log.info("Publishing OrderCreatedEvent for orderId: {}", event.getData().getOrderId());
-        rabbitTemplate.convertAndSend(RabbitMQConfig.EXCHANGE_NAME, "order.created", event);
+        save("order.created", event);
+    }
+
+    public void publishOrderCancelledEvent(Object event) {
+        save("order.cancelled", event);
+    }
+
+    private void save(String routingKey, Object event) {
+        try {
+            outboxEventRepository.save(new OutboxEvent(routingKey, objectMapper.writeValueAsString(event)));
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Cannot serialize event " + routingKey, exception);
+        }
     }
 }

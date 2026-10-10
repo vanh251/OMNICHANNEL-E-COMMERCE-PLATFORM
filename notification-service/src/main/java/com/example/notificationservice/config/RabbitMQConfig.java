@@ -32,6 +32,21 @@ public class RabbitMQConfig {
     }
 
     @Bean
+    public Binding paymentSucceededBinding(Queue notificationQueue, TopicExchange ecommerceExchange) {
+        return BindingBuilder.bind(notificationQueue).to(ecommerceExchange).with("payment.succeeded");
+    }
+
+    @Bean
+    public Binding paymentFailedBinding(Queue notificationQueue, TopicExchange ecommerceExchange) {
+        return BindingBuilder.bind(notificationQueue).to(ecommerceExchange).with("payment.failed");
+    }
+
+    @Bean
+    public Binding orderCancelledBinding(Queue notificationQueue, TopicExchange ecommerceExchange) {
+        return BindingBuilder.bind(notificationQueue).to(ecommerceExchange).with("order.cancelled");
+    }
+
+    @Bean
     public MessageConverter jsonMessageConverter() {
         return new Jackson2JsonMessageConverter();
     }
