@@ -12,7 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/v1/payments")
+@RequestMapping("/api/payments")
 @RequiredArgsConstructor
 @Tag(name = "Payment Controller", description = "APIs for payment processing")
 public class PaymentController {
