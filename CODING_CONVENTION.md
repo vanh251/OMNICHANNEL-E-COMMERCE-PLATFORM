@@ -316,36 +316,36 @@ Không đặt business rule vào Repository.
 Base path:
 
 ```text
-/api/v1/...
+/api/...
 ```
 
 Ví dụ:
 
 ```text
-POST   /api/v1/auth/register
-POST   /api/v1/auth/login
-POST   /api/v1/auth/refresh
+POST   /api/auth/register
+POST   /api/auth/login
+POST   /api/auth/refresh
 
-GET    /api/v1/users/me
+GET    /api/users/me
 
-GET    /api/v1/products
-GET    /api/v1/products/{id}
-POST   /api/v1/products           (ADMIN)
-PUT    /api/v1/products/{id}      (ADMIN)
-DELETE /api/v1/products/{id}      (ADMIN)
-GET    /api/v1/categories
-POST   /api/v1/categories         (ADMIN)
+GET    /api/products
+GET    /api/products/{id}
+POST   /api/products           (ADMIN)
+PUT    /api/products/{id}      (ADMIN)
+DELETE /api/products/{id}      (ADMIN)
+GET    /api/categories
+POST   /api/categories         (ADMIN)
 
-POST   /api/v1/orders
-GET    /api/v1/orders/{id}
-GET    /api/v1/orders/my-orders
-POST   /api/v1/orders/{id}/cancel
+POST   /api/orders
+GET    /api/orders/{id}
+GET    /api/orders/my-orders
+POST   /api/orders/{id}/cancel
 
-POST   /api/v1/payments
-GET    /api/v1/payments/{orderId}
-GET    /api/v1/payments/methods
-POST   /api/v1/payments/{id}/refund   (ADMIN)
-POST   /api/v1/payments/webhook/{provider}
+POST   /api/payments
+GET    /api/payments/{orderId}
+GET    /api/payments/methods
+POST   /api/payments/{id}/refund   (ADMIN)
+POST   /api/payments/webhook/{provider}
 ```
 
 HTTP method:
@@ -365,7 +365,7 @@ Không dùng `POST` cho mọi endpoint nếu không cần thiết.
 Các endpoint trả danh sách phải hỗ trợ pagination:
 
 ```text
-GET /api/v1/products?page=0&size=20&sort=createdAt,desc
+GET /api/products?page=0&size=20&sort=createdAt,desc
 ```
 
 Response có pagination phải bọc trong `Page<T>` hoặc trả thêm metadata:
@@ -387,7 +387,7 @@ Default: `page=0`, `size=20`. Không cho phép `size > 100`.
 
 ### Webhook Handler
 
-Endpoint nhận webhook từ cổng thanh toán (`/api/v1/payments/webhook/{provider}`) phải:
+Endpoint nhận webhook từ cổng thanh toán (`/api/payments/webhook/{provider}`) phải:
 
 - Xác minh **chữ ký (signature)** từ provider trước khi xử lý.
 - Trả HTTP `200 OK` ngay lập tức — xử lý bất đồng bộ qua internal queue.
