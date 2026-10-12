@@ -862,6 +862,9 @@ final stock
 ✅ Performance Report
 ```
 
+Triển khai trong repository: [hướng dẫn Day 13](day13-monitoring-load-test.md).
+Kết quả đo thực tế và các giới hạn: [báo cáo hiệu năng](day13-performance-report.md).
+
 ---
 
 # DAY 14 — Integration + Final Demo
