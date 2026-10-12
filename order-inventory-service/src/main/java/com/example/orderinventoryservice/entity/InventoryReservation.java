@@ -4,7 +4,8 @@ import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
 @Entity
-@Table(name = "inventory_reservation")
+@Table(name = "inventory_reservation", indexes =
+        @Index(name = "idx_reservation_order_id", columnList = "orderId"))
 @Getter
 @Setter
 @Builder

@@ -49,9 +49,13 @@ jobs:
 
             order:
               - 'order-inventory-service/**'
+              - 'infrastructure/postgres/run-performance-tests.py'
+              - 'infrastructure/postgres/performance-order.sql'
 
             payment:
               - 'payment-service/**'
+              - 'infrastructure/postgres/run-performance-tests.py'
+              - 'infrastructure/postgres/performance-payment.sql'
 
             notification:
               - 'notification-service/**'
@@ -153,8 +157,18 @@ jobs:
       - name: Grant execute permission
         run: chmod +x gradlew
 
-      - name: Test
-        run: ./gradlew clean test
+      - name: Test and build with PostgreSQL concurrency checks
+        working-directory: .
+        run: python infrastructure/postgres/run-performance-tests.py --env-file .env.example --services order-inventory-service
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: order-performance-tests
+          path: |
+            infrastructure/k6/results/*.log
+            order-inventory-service/build/reports/tests/test
 
   payment:
     name: Test Payment Service
@@ -180,8 +194,18 @@ jobs:
       - name: Grant execute permission
         run: chmod +x gradlew
 
-      - name: Test
-        run: ./gradlew clean test
+      - name: Test and build with PostgreSQL concurrency checks
+        working-directory: .
+        run: python infrastructure/postgres/run-performance-tests.py --env-file .env.example --services payment-service
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: payment-performance-tests
+          path: |
+            infrastructure/k6/results/*.log
+            payment-service/build/reports/tests/test
 
   notification:
     name: Test Notification Service

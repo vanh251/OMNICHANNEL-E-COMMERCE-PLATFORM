@@ -24,3 +24,6 @@ spring:
     
 server:
   port: 0
+
+outbox:
+  enabled: false

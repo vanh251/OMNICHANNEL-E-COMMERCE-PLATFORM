@@ -20,7 +20,7 @@ public class ProductServiceClientGrpcImpl implements ProductServiceClient {
 
     @Override
     public ProductInfo getProductInfo(String productId, String sku) {
-        log.info("gRPC Client: fetching product info for productId={}, sku={}", productId, sku);
+        log.debug("gRPC Client: fetching product info for productId={}, sku={}", productId, sku);
         try {
             VerifyProductRequest request = VerifyProductRequest.newBuilder()
                     .setSku(sku)

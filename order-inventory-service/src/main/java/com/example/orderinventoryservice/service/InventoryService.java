@@ -1,6 +1,5 @@
 package com.example.orderinventoryservice.service;
 
-import com.example.orderinventoryservice.entity.Inventory;
 import com.example.orderinventoryservice.entity.InventoryReservation;
 import com.example.orderinventoryservice.exception.InsufficientStockException;
 import com.example.orderinventoryservice.repository.InventoryRepository;
@@ -11,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Comparator;
 
 @Slf4j
 @Service
@@ -22,21 +22,10 @@ public class InventoryService {
 
     @Transactional
     public void reserveStock(Long orderId, String sku, Integer quantity) {
-        Inventory inventory = inventoryRepository.findBySkuForUpdate(sku)
-                .orElseThrow(() -> new InsufficientStockException("Product SKU not found in inventory: " + sku));
-
-        if (inventory.getAvailableStock() < quantity) {
-            log.warn("Insufficient stock for SKU {}. Available: {}, Requested: {}", 
-                     sku, inventory.getAvailableStock(), quantity);
-            throw new InsufficientStockException("Insufficient stock for SKU: " + sku);
+        if (quantity == null || quantity <= 0) {
+            throw new IllegalArgumentException("Reservation quantity must be positive");
         }
-
-        // Update stock
-        inventory.setReservedStock(inventory.getReservedStock() + quantity);
-        inventory.setAvailableStock(inventory.getTotalStock() - inventory.getReservedStock());
-        inventoryRepository.save(inventory);
-
-        // Create reservation
+        // Persist the reservation before taking the hot SKU lock; failures roll back both writes.
         InventoryReservation reservation = InventoryReservation.builder()
                 .sku(sku)
                 .orderId(orderId)
@@ -45,41 +34,45 @@ public class InventoryService {
                 .build();
         inventoryReservationRepository.save(reservation);
 
-        log.info("Reserved {} items of SKU {} for orderId {}", quantity, sku, orderId);
+        // The conditional UPDATE takes the SQL row lock and checks stock atomically.
+        if (inventoryRepository.reserveAvailableStock(sku, quantity) == 0) {
+            throw new InsufficientStockException("Insufficient stock for SKU: " + sku);
+        }
+
+        log.debug("Reserved {} items of SKU {} for orderId {}", quantity, sku, orderId);
     }
 
     @Transactional
     public void releaseStock(Long orderId) {
-        List<InventoryReservation> reservations = inventoryReservationRepository.findByOrderId(orderId);
+        List<InventoryReservation> reservations = sortedReservations(orderId);
         
         for (InventoryReservation reservation : reservations) {
             if (reservation.getStatus() == InventoryReservation.ReservationStatus.PENDING) {
-                Inventory inventory = inventoryRepository.findBySkuForUpdate(reservation.getSku()).orElse(null);
-                if (inventory != null) {
-                    inventory.setReservedStock(inventory.getReservedStock() - reservation.getQuantity());
-                    inventory.setAvailableStock(inventory.getTotalStock() - inventory.getReservedStock());
-                    inventoryRepository.save(inventory);
-                }
                 reservation.setStatus(InventoryReservation.ReservationStatus.RELEASED);
                 inventoryReservationRepository.save(reservation);
-                log.info("Released {} items of SKU {} for orderId {}", reservation.getQuantity(), reservation.getSku(), orderId);
+                if (inventoryRepository.releaseReservedStock(reservation.getSku(), reservation.getQuantity()) != 1) {
+                    throw new IllegalStateException("Cannot release reserved stock for " + reservation.getSku());
+                }
+                log.debug("Released {} items of SKU {} for orderId {}", reservation.getQuantity(), reservation.getSku(), orderId);
             }
         }
     }
 
     @Transactional
     public void confirmStock(Long orderId) {
-        for (InventoryReservation reservation : inventoryReservationRepository.findByOrderId(orderId)) {
+        for (InventoryReservation reservation : sortedReservations(orderId)) {
             if (reservation.getStatus() == InventoryReservation.ReservationStatus.PENDING) {
-                Inventory inventory = inventoryRepository.findBySkuForUpdate(reservation.getSku())
-                        .orElseThrow(() -> new IllegalStateException("Missing inventory for " + reservation.getSku()));
-                inventory.setReservedStock(inventory.getReservedStock() - reservation.getQuantity());
-                inventory.setTotalStock(inventory.getTotalStock() - reservation.getQuantity());
-                inventory.setAvailableStock(inventory.getTotalStock() - inventory.getReservedStock());
-                inventoryRepository.save(inventory);
                 reservation.setStatus(InventoryReservation.ReservationStatus.CONFIRMED);
                 inventoryReservationRepository.save(reservation);
+                if (inventoryRepository.confirmReservedStock(reservation.getSku(), reservation.getQuantity()) != 1) {
+                    throw new IllegalStateException("Cannot confirm reserved stock for " + reservation.getSku());
+                }
             }
         }
+    }
+
+    private List<InventoryReservation> sortedReservations(Long orderId) {
+        return inventoryReservationRepository.findByOrderId(orderId).stream()
+                .sorted(Comparator.comparing(InventoryReservation::getSku)).toList();
     }
 }
