@@ -403,6 +403,17 @@ services:
     networks:
       - ecommerce-network
 
+  k6:
+    image: grafana/k6:1.0.0
+    profiles: ["load-test"]
+    user: "0"
+    working_dir: /scripts
+    volumes:
+      - ./infrastructure/k6:/scripts:ro
+      - ./infrastructure/k6/results:/results
+    networks:
+      - ecommerce-network
+
 
 # =======================================================
 # VOLUMES
