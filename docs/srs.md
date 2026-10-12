@@ -91,7 +91,7 @@ Nền tảng được thiết kế để xử lý lượng truy cập lớn (nh�
 - **Tính nhất quán:** Giao dịch phân tán phải được quản lý chặt chẽ thông qua Saga pattern, triển khai các hành động đền bù/bù đắp tự động khi xảy ra lỗi.
 
 **4.4. Giám sát & Khả năng quan sát (Observability)**
-- **Log tập trung:** Log từ tất cả microservices phải được thu thập và giám sát bằng Grafana Loki và Promtail.
+- **Log tập trung:** Log từ tất cả microservices được thu thập bằng Grafana Alloy và giám sát qua Grafana Loki. Alloy thay Promtail đã hết hỗ trợ; xem [hướng dẫn Day 13](day13-monitoring-load-test.md).
 - **Metrics:** Các số liệu hệ thống (CPU, RAM, Tốc độ Request) phải được thu thập thông qua Prometheus.
 - **Distributed Tracing (Truy vết phân tán):** Luồng xử lý request qua các microservice phải có thể truy vết được bằng Jaeger/Zipkin và OpenTelemetry.
 
