@@ -1,0 +1,48 @@
+logging {
+  level = "info"
+}
+
+discovery.docker "services" {
+  host             = "unix:///var/run/docker.sock"
+  refresh_interval = "5s"
+  filter {
+    name   = "label"
+    values = ["ecommerce.logs=true"]
+  }
+}
+
+discovery.relabel "services" {
+  targets = discovery.docker.services.targets
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service_name"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+}
+
+loki.source.docker "services" {
+  host          = "unix:///var/run/docker.sock"
+  targets       = discovery.relabel.services.output
+  labels        = {job = "ecommerce"}
+  forward_to    = [loki.process.services.receiver]
+}
+
+loki.process "services" {
+  // Combine Java exception continuations into the preceding Spring log line.
+  stage.multiline {
+    firstline     = "^\\d{4}-\\d{2}-\\d{2}"
+    max_wait_time = "3s"
+    max_lines     = 256
+  }
+  forward_to = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
