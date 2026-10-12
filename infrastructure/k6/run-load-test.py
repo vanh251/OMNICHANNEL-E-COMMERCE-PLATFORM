@@ -115,6 +115,25 @@ def snapshot(args, database, sku):
     return json.loads(next(line for line in output.splitlines() if line.startswith("{")))
 
 
+def wait_for_idle(args, database):
+    """Keep previous Order/Saga work out of the next load measurement."""
+    deadline = time.monotonic() + args.settle_timeout
+    while True:
+        output = sql(args, database, """
+            SELECT json_build_object(
+                'pendingOrders', (SELECT count(*) FROM orders o WHERE o.status = 'PENDING'
+                    AND EXISTS (SELECT 1 FROM order_items i
+                        WHERE i.order_id = o.id AND i.sku LIKE 'DAY13-%')),
+                'pendingEvents', (SELECT count(*) FROM outbox_events WHERE published = false));
+        """)
+        backlog = json.loads(output)
+        if backlog["pendingOrders"] == 0 and backlog["pendingEvents"] == 0:
+            return
+        if time.monotonic() >= deadline:
+            raise RuntimeError("Previous Order/Saga backlog is not settled; no new load was started")
+        time.sleep(2)
+
+
 def stock_checks(initial, final, successful_orders):
     return {
         "nonNegative": all(final[key] >= 0 for key in
@@ -144,6 +163,7 @@ def write_report(report):
         ("Confirmed orders", final["confirmedOrders"]), ("Pending orders", final["pendingOrders"]),
         ("Cancelled orders", final["cancelledOrders"]),
         ("Saga settled", report["sagaSettled"]), ("k6 thresholds passed", k6["thresholdsPassed"]),
+        ("Saga settling time after k6 (s)", report["sagaSettleSeconds"]),
         ("Stock checks passed", all(report["stockChecks"].values())),
     ]
     text = f"# Day 13 performance report: {run_id}\n\n"
@@ -184,7 +204,8 @@ def run_test(args, database, rate):
     if not summary_file.exists():
         raise RuntimeError("k6 did not produce a summary; inspect setup/service errors")
     summary = json.loads(summary_file.read_text(encoding="utf-8"))
-    deadline = time.monotonic() + args.settle_timeout
+    settle_started = time.monotonic()
+    deadline = settle_started + args.settle_timeout
     final = snapshot(args, database, fixture["sku"])
     while final["pendingOrders"] and time.monotonic() < deadline:
         time.sleep(2)
@@ -194,6 +215,7 @@ def run_test(args, database, rate):
         "sku": fixture["sku"], "productId": fixture["productId"],
         "initialStock": fixture["initialStock"], "before": before, "finalStock": final,
         "sagaSettled": final["pendingOrders"] == 0,
+        "sagaSettleSeconds": round(time.monotonic() - settle_started, 3),
         "stockChecks": stock_checks(fixture["initialStock"], final, summary["successfulOrders"]),
         "k6ExitCode": completed.returncode, "k6": summary,
     }
@@ -226,7 +248,10 @@ def main():
         parser.error("Rates, duration, VUs and latency limit must be positive; error rate in (0, 1]")
     RESULTS.mkdir(parents=True, exist_ok=True)
     database = order_database(args)
-    outcomes = [run_test(args, database, rate) for rate in args.rates]
+    outcomes = []
+    for rate in args.rates:
+        wait_for_idle(args, database)
+        outcomes.append(run_test(args, database, rate))
     return 0 if all(outcomes) else 1
 
 

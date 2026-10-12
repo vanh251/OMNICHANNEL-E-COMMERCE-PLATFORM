@@ -1,0 +1,106 @@
+"""Run Order/Payment concurrency tests against disposable PostgreSQL databases.
+
+Requires Docker and a Java 17 toolchain. Uses the PostgreSQL image from Compose
+in a disposable container with a random host port, avoiding native PostgreSQL.
+Each service gets a fresh performance_test_* database, removed after the run.
+Generated test credentials are passed through environment variables.
+"""
+
+import argparse
+import json
+import os
+from pathlib import Path
+import subprocess
+import secrets
+import time
+import uuid
+import xml.etree.ElementTree as ET
+
+ROOT = Path(__file__).resolve().parents[2]
+RESULTS = ROOT / "infrastructure/k6/results"
+
+
+def run_checked(command, **kwargs):
+    result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True,
+                            encoding="utf-8", errors="replace", **kwargs)
+    if result.returncode:
+        raise RuntimeError("Docker Compose operation failed; check PostgreSQL health and Docker access")
+    return result.stdout
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--compose-file", default="docker-compose.yml")
+    parser.add_argument("--env-file", default=".env")
+    parser.add_argument("--services", nargs="+", choices=["order-inventory-service", "payment-service"],
+                        default=["order-inventory-service", "payment-service"])
+    args = parser.parse_args()
+    compose = ["docker", "compose", "--env-file", args.env_file, "-f", args.compose_file]
+    config = json.loads(run_checked(compose + ["config", "--format", "json"]))
+    container = f"performance-postgres-{uuid.uuid4().hex[:12]}"
+    credentials = {"POSTGRES_USER": "postgres", "POSTGRES_PASSWORD": secrets.token_urlsafe(24)}
+    environment = os.environ.copy()
+    environment.update(credentials)
+    run_checked(["docker", "run", "--rm", "-d", "--name", container,
+                 "-e", "POSTGRES_USER", "-e", "POSTGRES_PASSWORD", "-p", "127.0.0.1::5432",
+                 config["services"]["postgres"]["image"]], env=environment)
+    try:
+        deadline = time.monotonic() + 60
+        while True:
+            ready = subprocess.run(["docker", "exec", container, "pg_isready", "-U", "postgres"],
+                                   capture_output=True)
+            if ready.returncode == 0:
+                break
+            if time.monotonic() >= deadline:
+                raise RuntimeError("Disposable PostgreSQL did not become ready")
+            time.sleep(0.5)
+        port = run_checked(["docker", "port", container, "5432/tcp"]).strip().rsplit(":", 1)[1]
+        psql = ["docker", "exec", "-i", container, "psql", "-U", "postgres", "-d", "postgres",
+                "-X", "-v", "ON_ERROR_STOP=1"]
+        return run_service_tests(psql, port, credentials, args.services)
+    finally:
+        run_checked(["docker", "stop", container])
+
+
+def run_service_tests(psql, port, credentials, services):
+    RESULTS.mkdir(parents=True, exist_ok=True)
+    passed = True
+    for service in services:
+        suffix = "order" if service == "order-inventory-service" else "payment"
+        database = f"performance_test_{suffix}_{uuid.uuid4().hex[:12]}"
+        run_checked(psql, input=f'CREATE DATABASE "{database}";')
+        try:
+            environment = os.environ.copy()
+            environment.update({
+                "PERFORMANCE_TEST_POSTGRES_URL": f"jdbc:postgresql://127.0.0.1:{port}/{database}",
+                "PERFORMANCE_TEST_POSTGRES_USER": credentials["POSTGRES_USER"],
+                "PERFORMANCE_TEST_POSTGRES_PASSWORD": credentials["POSTGRES_PASSWORD"],
+            })
+            wrapper = "gradlew.bat" if os.name == "nt" else "gradlew"
+            command = [str(ROOT / service / wrapper), "test", "bootJar", "--rerun-tasks",
+                       "--no-daemon", "--console=plain"]
+            if os.name != "nt":
+                command.insert(0, "sh")
+            result = subprocess.run(command, cwd=ROOT / service, env=environment,
+                                    capture_output=True, text=True, encoding="utf-8", errors="replace")
+            log = RESULTS / f"{database}.log"
+            log.write_text(result.stdout + result.stderr, encoding="utf-8")
+            counts = {key: 0 for key in ("tests", "failures", "errors", "skipped")}
+            for path in (ROOT / service / "build/test-results/test").glob("TEST-*.xml"):
+                suite = ET.parse(path).getroot()
+                for key in counts:
+                    counts[key] += int(suite.attrib.get(key, 0))
+            success = result.returncode == 0
+            print(f"{service}: {'PASS' if success else 'FAIL'} {counts}; log: {log.relative_to(ROOT)}", flush=True)
+            passed = passed and success
+        finally:
+            run_checked(psql, input=f'DROP DATABASE "{database}" WITH (FORCE);')
+    return 0 if passed else 1
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except (RuntimeError, OSError, ValueError) as exception:
+        print(f"PostgreSQL performance tests failed: {exception}")
+        raise SystemExit(1)
