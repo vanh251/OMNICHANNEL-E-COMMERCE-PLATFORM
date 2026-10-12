@@ -19,6 +19,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Comparator;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -102,11 +103,6 @@ public class OrderService {
 
         Order savedOrder = orderRepository.save(order);
         
-        // Reserve stock
-        for (OrderItem item : savedOrder.getItems()) {
-            inventoryService.reserveStock(savedOrder.getId(), item.getSku(), item.getQuantity());
-        }
-
         // Publish OrderCreatedEvent
         OrderCreatedEvent.OrderCreatedEventData eventData = OrderCreatedEvent.OrderCreatedEventData.builder()
                 .orderId(savedOrder.getId().toString())
@@ -131,6 +127,13 @@ public class OrderService {
                 .build();
 
         eventPublisher.publishOrderCreatedEvent(event);
+
+        // Take SKU locks only after persisting the order and its Outbox event.
+        // They remain in the same transaction: insufficient stock rolls everything back.
+        for (OrderItem item : savedOrder.getItems().stream()
+                .sorted(Comparator.comparing(OrderItem::getSku)).toList()) {
+            inventoryService.reserveStock(savedOrder.getId(), item.getSku(), item.getQuantity());
+        }
 
         log.info("Created order with id={}, orderCode={}, userId={}", savedOrder.getId(), orderCode, userId);
 
@@ -158,7 +161,7 @@ public class OrderService {
 
     @Transactional
     public OrderResponse cancelOrder(Long orderId, Long userId, String userEmail) {
-        Order order = orderRepository.findById(orderId)
+        Order order = orderRepository.findByIdForUpdate(orderId)
                 .orElseThrow(() -> new OrderNotFoundException("Order not found with id: " + orderId));
 
         if (!order.getUserId().equals(userId)) {
@@ -178,11 +181,9 @@ public class OrderService {
 
         order.setStatus(OrderStatus.CANCELLED);
 
-        // Release stock if order is pending
-        inventoryService.releaseStock(orderId);
-
         Order savedOrder = orderRepository.save(order);
         eventPublisher.publishOrderCancelledEvent(cancellationEvent(savedOrder, "CUSTOMER_CANCELLED"));
+        inventoryService.releaseStock(orderId);
         log.info("Cancelled order id={}, previousStatus={}", orderId, currentStatus);
 
         return mapToResponse(savedOrder);
@@ -197,9 +198,9 @@ public class OrderService {
             log.warn("Ignoring payment success for orderId={} in status={}", orderId, order.getStatus());
             return;
         }
-        inventoryService.confirmStock(orderId);
         changeStatus(order, OrderStatus.CONFIRMED, "PAYMENT");
         orderRepository.save(order);
+        inventoryService.confirmStock(orderId);
     }
 
     @Transactional
@@ -211,10 +212,10 @@ public class OrderService {
             log.warn("Ignoring payment failure for orderId={} in status={}", orderId, order.getStatus());
             return;
         }
-        inventoryService.releaseStock(orderId);
         changeStatus(order, OrderStatus.CANCELLED, "PAYMENT");
         orderRepository.save(order);
         eventPublisher.publishOrderCancelledEvent(cancellationEvent(order, "PAYMENT_FAILED"));
+        inventoryService.releaseStock(orderId);
     }
 
     private void changeStatus(Order order, OrderStatus status, String actor) {
@@ -244,18 +245,8 @@ public class OrderService {
 
     private String generateOrderCode() {
         String dateStr = LocalDate.now().format(DATE_FORMATTER);
-        String uniquePart = String.format("%06d", System.nanoTime() % 1_000_000);
-        String orderCode = "ORD-" + dateStr + "-" + uniquePart;
-
-        // Ensure uniqueness
-        int attempt = 0;
-        while (orderRepository.existsByOrderCode(orderCode) && attempt < 10) {
-            uniquePart = String.format("%06d", System.nanoTime() % 1_000_000);
-            orderCode = "ORD-" + dateStr + "-" + uniquePart;
-            attempt++;
-        }
-
-        return orderCode;
+        // Full UUID entropy avoids the six-digit collision window and a DB round trip.
+        return "ORD-" + dateStr + "-" + UUID.randomUUID().toString().replace("-", "");
     }
 
     private OrderResponse mapToResponse(Order order) {
