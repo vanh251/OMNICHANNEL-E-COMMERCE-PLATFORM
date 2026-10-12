@@ -1,3 +1,9 @@
+x-service-logging: &service-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
 
   # =====================================================
@@ -105,6 +111,9 @@ services:
   identity-service:
     image: ${IMAGE_PREFIX:-ghcr.io/vanh251/omnichannel}/identity-service:${IMAGE_TAG:-latest}
     container_name: ecommerce-identity-service
+    labels:
+      ecommerce.logs: "true"
+    logging: *service-logging
     restart: unless-stopped
     environment:
       JAVA_TOOL_OPTIONS: "-Xms256m -Xmx512m"
@@ -134,6 +143,9 @@ services:
   product-service:
     image: ${IMAGE_PREFIX:-ghcr.io/vanh251/omnichannel}/product-service:${IMAGE_TAG:-latest}
     container_name: ecommerce-product-service
+    labels:
+      ecommerce.logs: "true"
+    logging: *service-logging
     restart: unless-stopped
     environment:
       JAVA_TOOL_OPTIONS: "-Xms256m -Xmx512m"
@@ -160,6 +172,9 @@ services:
   order-inventory-service:
     image: ${IMAGE_PREFIX:-ghcr.io/vanh251/omnichannel}/order-inventory-service:${IMAGE_TAG:-latest}
     container_name: ecommerce-order-inventory-service
+    labels:
+      ecommerce.logs: "true"
+    logging: *service-logging
     restart: unless-stopped
     environment:
       JAVA_TOOL_OPTIONS: "-Xms256m -Xmx512m"
@@ -198,6 +213,9 @@ services:
   payment-service:
     image: ${IMAGE_PREFIX:-ghcr.io/vanh251/omnichannel}/payment-service:${IMAGE_TAG:-latest}
     container_name: ecommerce-payment-service
+    labels:
+      ecommerce.logs: "true"
+    logging: *service-logging
     restart: unless-stopped
     environment:
       JAVA_TOOL_OPTIONS: "-Xms256m -Xmx512m"
@@ -229,6 +247,9 @@ services:
   notification-service:
     image: ${IMAGE_PREFIX:-ghcr.io/vanh251/omnichannel}/notification-service:${IMAGE_TAG:-latest}
     container_name: ecommerce-notification-service
+    labels:
+      ecommerce.logs: "true"
+    logging: *service-logging
     restart: unless-stopped
     environment:
       JAVA_TOOL_OPTIONS: "-Xms256m -Xmx512m"
@@ -261,6 +282,9 @@ services:
   api-gateway:
     image: ${IMAGE_PREFIX:-ghcr.io/vanh251/omnichannel}/api-gateway:${IMAGE_TAG:-latest}
     container_name: ecommerce-api-gateway
+    labels:
+      ecommerce.logs: "true"
+    logging: *service-logging
     restart: unless-stopped
     ports:
       - "${GATEWAY_PORT:-8080}:8080"
@@ -305,7 +329,7 @@ services:
     container_name: ecommerce-prometheus
     restart: unless-stopped
     ports:
-      - "${PROMETHEUS_PORT:-9090}:9090"
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
     volumes:
       - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
@@ -326,13 +350,46 @@ services:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
     ports:
-      - "${GRAFANA_PORT:-3000}:3000"
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
     volumes:
       - grafana_data:/var/lib/grafana
+      - ./infrastructure/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infrastructure/grafana/dashboards:/var/lib/grafana/dashboards:ro
     depends_on:
       - prometheus
+      - loki
     networks:
       - ecommerce-network
+
+  loki:
+    image: grafana/loki:3.7.0
+    container_name: ecommerce-loki
+    restart: unless-stopped
+    command: ["-config.file=/etc/loki/loki.yml"]
+    volumes:
+      - ./infrastructure/loki/loki.yml:/etc/loki/loki.yml:ro
+      - loki_data:/loki
+    networks:
+      - ecommerce-network
+
+  alloy:
+    image: grafana/alloy:v1.18.0
+    container_name: ecommerce-alloy
+    restart: unless-stopped
+    user: "0"
+    command:
+      - run
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    volumes:
+      - ./infrastructure/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy_data:/var/lib/alloy/data
+    depends_on:
+      - loki
+    networks:
+      - ecommerce-network
+
 
 # =======================================================
 # VOLUMES
@@ -350,6 +407,10 @@ volumes:
     name: ecommerce_prometheus_data
   grafana_data:
     name: ecommerce_grafana_data
+  loki_data:
+    name: ecommerce_loki_data
+  alloy_data:
+    name: ecommerce_alloy_data
 
 # =======================================================
 # NETWORK
