@@ -146,11 +146,11 @@ Exit code khác 0 nếu k6 fail, tồn kho sai hoặc Saga chưa xử lý hết 
 Báo cáo vẫn được ghi khi k6 fail threshold. Không có số liệu giả định thay cho
 lần chạy thật. Nếu setup thất bại và k6 không xuất summary, runner báo lỗi.
 
-Outbox hiện publish tối đa 20 event mỗi chu kỳ khoảng 1 giây ở cả Order/Payment.
-Bài đo có thể tạo backlog ở 500/1000 RPS: tăng thời gian chờ chỉ giúp quan sát
-Saga hoàn tất, không làm tăng throughput của luồng event. Một SKU duy nhất cũng
-cố ý tạo tranh chấp SQL pessimistic lock. Day 13 đo các giới hạn này, giữ cơ chế
-inventory và logic payment hiện có.
+Baseline Day 13 dùng Outbox 20 event mỗi chu kỳ khoảng 1 giây ở cả Order/Payment.
+Bản [tối ưu sau Day 13](performance-optimization.md) dùng mặc định 200 event/50 ms,
+confirm theo lô và UPDATE tồn kho nguyên tử. Một SKU duy nhất vẫn cố ý tạo tranh chấp
+khóa hàng PostgreSQL. Runner chờ fixture tải cũ và Order Outbox xử lý hết trước mỗi
+mức; nếu hết timeout thì không bắt đầu tải mới. Báo cáo ghi thêm thời gian chờ Saga.
 
 ## Kiểm tra cấu hình và CI
 

@@ -1,5 +1,8 @@
 # Báo cáo hiệu năng Day 13
 
+Đây là baseline trước tối ưu. Thay đổi và kết quả đo sau triển khai nằm trong
+[tối ưu hiệu năng sau Day 13](performance-optimization.md).
+
 Đã đo trên máy local ngày **12/10/2026 (Asia/Saigon)** bằng k6 qua API Gateway.
 Monitoring và smoke test hoạt động; hai mức tải mục tiêu 500/1000 request mỗi
 giây **chưa đạt** ngưỡng p95 và dropped iterations. Các snapshot được ghi nhận

@@ -42,6 +42,9 @@ Chạy trên môi trường local hoặc staging dành cho thử tải.
 [Báo cáo hiệu năng Day 13](docs/day13-performance-report.md) ghi các kết quả đã đo
 và giới hạn của môi trường kiểm tra.
 
+[Tối ưu sau Day 13](docs/performance-optimization.md) mô tả Outbox theo lô,
+các UPDATE tồn kho nguyên tử, cấu hình consumer và kiểm thử concurrency trên PostgreSQL.
+
 ## Build và test
 
 Dùng JDK 17; mỗi service có Gradle Wrapper riêng. Chạy trong thư mục service:
