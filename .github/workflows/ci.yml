@@ -247,5 +247,25 @@ jobs:
 
       - name: Validate Docker Compose
         run: |
-          cp .env.example .env
-          docker compose config
+          docker compose --env-file .env.example config --quiet
+          docker compose --env-file .env.example -f docker-compose.production.yml config --quiet
+
+      - name: Validate Prometheus
+        run: >-
+          docker run --rm
+          -v "$PWD/infrastructure/prometheus:/etc/prometheus:ro"
+          --entrypoint promtool prom/prometheus:v2.55.1
+          check config /etc/prometheus/prometheus.yml
+
+      - name: Validate Loki
+        run: >-
+          docker run --rm
+          -v "$PWD/infrastructure/loki:/etc/loki:ro"
+          grafana/loki:3.7.0
+          -config.file=/etc/loki/loki.yml -verify-config=true
+
+      - name: Validate Alloy
+        run: >-
+          docker run --rm
+          -v "$PWD/infrastructure/alloy:/etc/alloy:ro"
+          grafana/alloy:v1.18.0 validate /etc/alloy/config.alloy
