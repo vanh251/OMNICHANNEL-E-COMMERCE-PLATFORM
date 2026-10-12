@@ -269,3 +269,6 @@ jobs:
           docker run --rm
           -v "$PWD/infrastructure/alloy:/etc/alloy:ro"
           grafana/alloy:v1.18.0 validate /etc/alloy/config.alloy
+
+      - name: Test stock report reconciliation
+        run: python -m unittest discover -s infrastructure/k6 -p "test_*.py"
