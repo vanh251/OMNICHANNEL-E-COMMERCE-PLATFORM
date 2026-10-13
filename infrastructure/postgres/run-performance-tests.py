@@ -53,6 +53,49 @@ def start_postgres(image, credentials, environment):
             time.sleep(2 * attempt)
 
 
+def run_psql(psql, query, operation, max_attempts=10, delay=1.0):
+    last_error = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return run_checked(psql, operation=operation, input=query)
+        except RuntimeError as error:
+            last_error = error
+            error_str = str(error).lower()
+            if attempt < max_attempts and ("shutting down" in error_str or "starting up" in error_str or "connection" in error_str):
+                time.sleep(delay)
+                continue
+            raise
+    raise last_error
+
+
+def wait_for_postgres(container, timeout=60):
+    deadline = time.monotonic() + timeout
+    while True:
+        # The official postgres image starts a socket-only server during initdb,
+        # then stops it before starting the permanent TCP server.
+        # Checking TCP (127.0.0.1:5432) ignores the temporary socket-only server.
+        ready = subprocess.run(
+            ["docker", "exec", container, "pg_isready",
+             "-h", "127.0.0.1", "-p", "5432",
+             "-U", "postgres", "-d", "postgres"],
+            capture_output=True,
+        )
+        if ready.returncode == 0:
+            # Probe a lightweight query over TCP to ensure the permanent instance accepts commands
+            probe = subprocess.run(
+                ["docker", "exec", container, "psql",
+                 "-h", "127.0.0.1", "-U", "postgres", "-d", "postgres",
+                 "-X", "-c", "SELECT 1;"],
+                capture_output=True,
+                text=True,
+            )
+            if probe.returncode == 0 and "shutting down" not in probe.stderr.lower():
+                break
+        if time.monotonic() >= deadline:
+            raise RuntimeError("Disposable PostgreSQL did not accept TCP connections")
+        time.sleep(0.5)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--compose-file", default="docker-compose.yml")
@@ -69,18 +112,10 @@ def main():
     container = start_postgres(config["services"]["postgres"]["image"],
                                credentials, environment)
     try:
-        deadline = time.monotonic() + 60
-        while True:
-            ready = subprocess.run(["docker", "exec", container, "pg_isready", "-U", "postgres"],
-                                   capture_output=True)
-            if ready.returncode == 0:
-                break
-            if time.monotonic() >= deadline:
-                raise RuntimeError("Disposable PostgreSQL did not become ready")
-            time.sleep(0.5)
+        wait_for_postgres(container)
         port = run_checked(["docker", "port", container, "5432/tcp"],
                            operation="Read PostgreSQL host port").strip().rsplit(":", 1)[1]
-        psql = ["docker", "exec", "-i", container, "psql", "-U", "postgres", "-d", "postgres",
+        psql = ["docker", "exec", "-i", container, "psql", "-h", "127.0.0.1", "-U", "postgres", "-d", "postgres",
                 "-X", "-v", "ON_ERROR_STOP=1"]
         return run_service_tests(psql, port, credentials, args.services)
     finally:
@@ -96,8 +131,8 @@ def run_service_tests(psql, port, credentials, services):
     for service in services:
         suffix = "order" if service == "order-inventory-service" else "payment"
         database = f"performance_test_{suffix}_{uuid.uuid4().hex[:12]}"
-        run_checked(psql, operation="Create performance test database",
-                    input=f'CREATE DATABASE "{database}";')
+        run_psql(psql, f'CREATE DATABASE "{database}";',
+                 operation="Create performance test database")
         try:
             environment = os.environ.copy()
             environment.update({
@@ -123,8 +158,8 @@ def run_service_tests(psql, port, credentials, services):
             print(f"{service}: {'PASS' if success else 'FAIL'} {counts}; log: {log.relative_to(ROOT)}", flush=True)
             passed = passed and success
         finally:
-            run_checked(psql, operation="Drop performance test database",
-                        input=f'DROP DATABASE "{database}" WITH (FORCE);')
+            run_psql(psql, f'DROP DATABASE "{database}" WITH (FORCE);',
+                     operation="Drop performance test database")
     return 0 if passed else 1
 
 
