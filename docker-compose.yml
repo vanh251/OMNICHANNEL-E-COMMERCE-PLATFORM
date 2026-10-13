@@ -160,10 +160,18 @@ services:
       MONGO_DATABASE: ${MONGO_DATABASE}
       SPRING_MONGODB_URI: mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@${MONGO_HOST:-mongodb}:${MONGO_PORT:-27017}/${MONGO_DATABASE}?authSource=admin
       SPRING_DATA_MONGODB_URI: mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@${MONGO_HOST:-mongodb}:${MONGO_PORT:-27017}/${MONGO_DATABASE}?authSource=admin
+      RABBITMQ_HOST: ${RABBITMQ_HOST:-rabbitmq}
+      RABBITMQ_PORT: ${RABBITMQ_PORT:-5672}
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      CATALOG_INVENTORY_BACKFILL_ENABLED: ${CATALOG_INVENTORY_BACKFILL_ENABLED:-false}
+      RABBITMQ_VHOST: ${RABBITMQ_VHOST:-/}
     ports:
       - "${PRODUCT_SERVICE_PORT:-8082}:8082"
     depends_on:
       mongodb:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8082/actuator/health"]

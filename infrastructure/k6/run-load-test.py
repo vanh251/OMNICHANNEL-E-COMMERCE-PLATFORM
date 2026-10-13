@@ -97,15 +97,23 @@ def prepare_fixture(args, database, rate):
     product_id = product["id"]
     if not re.fullmatch(r"[A-Za-z0-9_-]+", product_id):
         raise RuntimeError("Unexpected product ID format")
-    # Operator fixture setup in the Order-owned DB, since there is no inventory write API.
-    # Every run INSERTs a new SKU; existing inventory is never reset.
-    sql(args, database, f"""
-        INSERT INTO inventory
-            (product_id, sku, total_stock, reserved_stock, available_stock, created_at, updated_at)
-        VALUES ('{product_id}', '{sku}', {stock}, 0, {stock}, NOW(), NOW());
-    """)
+    wait_for_inventory_sync(args.base_url, product_id, args.settle_timeout)
+    if snapshot(args, database, sku)["availableStock"] != stock:
+        raise RuntimeError("Inventory sync did not create the expected initial stock")
     return {"runId": run_id, "sku": sku, "productId": product_id, "initialStock": stock,
             "email": email, "password": password}
+
+
+def wait_for_inventory_sync(base_url, product_id, timeout):
+    deadline = time.monotonic() + timeout
+    while True:
+        with urllib.request.urlopen(base_url.rstrip("/") + f"/api/products/{product_id}", timeout=30) as response:
+            product = json.load(response)
+        if product["active"]:
+            return
+        if time.monotonic() >= deadline:
+            raise RuntimeError(f"Timed out waiting for inventory sync of product {product_id}")
+        time.sleep(1)
 
 
 def snapshot(args, database, sku):
