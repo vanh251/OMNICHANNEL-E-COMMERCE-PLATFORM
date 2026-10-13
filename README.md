@@ -2,9 +2,13 @@
 
 ## 1. Tổng quan đề tài
 
+**Tên đề tài:** Thiết kế, xây dựng và triển khai nền tảng thương mại điện tử đa kênh theo kiến trúc Microservices.
+
 Nền tảng thương mại điện tử đa kênh, xây dựng bằng Java 17 và Spring Boot 4.1.1. Bài toán trọng tâm là tiếp nhận đơn hàng từ nhiều kênh dùng chung danh mục và tồn kho, tránh bán vượt số lượng khi flash sale, xử lý thanh toán bất đồng bộ và tiếp tục bán hàng khi dịch vụ thông báo gặp sự cố.
 
-Trong doanh nghiệp, một thao tác đặt hàng liên quan nhiều nguồn dữ liệu và có thể thất bại từng phần. Dự án thực hành ranh giới nghiệp vụ, giao dịch cục bộ, Saga compensation và Transactional Outbox để giải quyết tình huống đó. Phiên bản hiện tại cung cấp backend API và nhận thanh toán qua [payOS](docs/payos-integration.md); chưa tích hợp sàn thương mại điện tử hay email thật.
+Trong doanh nghiệp, một thao tác đặt hàng liên quan nhiều nguồn dữ liệu và có thể thất bại từng phần. Dự án thực hành ranh giới nghiệp vụ, giao dịch cục bộ, Saga compensation và Transactional Outbox để giải quyết tình huống đó. Các kênh web, mobile và cửa hàng cần dùng chung nguồn dữ liệu để tránh lệch giá, tồn kho và trạng thái đơn. Microservices cho phép các nhóm phát triển và mở rộng từng nghiệp vụ độc lập; đổi lại, doanh nghiệp phải quản lý độ trễ, lỗi từng phần và tính nhất quán cuối cùng. Việc lựa chọn kiến trúc cần dựa trên quy mô và nhu cầu vận hành.
+
+Phiên bản hiện tại cung cấp backend API và nhận thanh toán qua [payOS](docs/payos-integration.md); chưa tích hợp sàn thương mại điện tử hay email thật.
 
 Chạy local từ thư mục gốc, cần Docker Compose v2 và Python 3.10+ cho demo; cần JDK 17 nếu chạy Gradle ngoài Docker:
 
@@ -29,7 +33,7 @@ Linux dùng `cp .env.example .env` và `python3`. Gateway ở `http://localhost:
 | Identity | Đăng ký, đăng nhập, JWT, hồ sơ và kiểm tra ADMIN | PostgreSQL `identity_db` | 8081 |
 | Product | CRUD sản phẩm, biến thể SKU, danh mục; xác minh SKU/giá qua gRPC | MongoDB `product_db` | 8082 REST, 9090 gRPC |
 | Order & Inventory | Đặt/hủy đơn, giữ/trừ/hoàn tồn, lịch sử trạng thái, Outbox | PostgreSQL `order_db` | 8083 |
-| Payment | Thanh toán giả lập, hoàn tiền giả lập, Outbox | PostgreSQL `payment_db` | 8084 |
+| Payment | Mock hoặc payOS: tạo checkout, xác minh webhook, reconciliation và Outbox; hoàn tiền thật chưa tích hợp | PostgreSQL `payment_db` | 8084 |
 | Notification | Nhận event RabbitMQ và ghi log `[EMAIL]` | Chưa lưu notification; cấu hình MongoDB đã có | 8085 |
 
 ```mermaid
@@ -45,6 +49,8 @@ flowchart LR
     Order -->|gRPC VerifyProductDetails| Product
     Order --> OrderDB[(order_db + Outbox)]
     Payment --> PaymentDB[(payment_db + Outbox)]
+    Payment -->|HTTPS SDK: tạo link / reconciliation| PayOS[payOS]
+    PayOS -->|HTTPS webhook có chữ ký| Nginx
     Order -->|Outbox: order.created / order.cancelled| MQ[RabbitMQ ecommerce.exchange]
     MQ -->|payment.queue: order.created / order.cancelled| Payment
     Payment -->|Outbox: payment.succeeded / payment.failed / payment.refunded| MQ
@@ -52,6 +58,12 @@ flowchart LR
     MQ -->|notification.queue| Notification
     Notification --> EmailLog[Log mô phỏng email]
 ```
+
+### 2.1. Cơ chế giao tiếp
+
+- **REST (HTTP/JSON):** client gọi Gateway; Gateway định tuyến tới các service. JWT/RBAC được kiểm tra tại service nghiệp vụ, Gateway hiện chủ yếu làm routing. Đường dẫn thực tế là `/api/...`; xem [API runtime](docs/api-runtime.md).
+- **gRPC (HTTP/2, Protocol Buffers):** Order gọi `ProductGrpcService.VerifyProductDetails` để lấy SKU, tên và giá. Contract ở [product.proto](product-service/src/main/proto/product.proto); latency phải đo thực tế, không mặc định đạt dưới 5 ms.
+- **Event-driven queue (RabbitMQ):** publisher đưa event từ Outbox vào topic exchange `ecommerce.exchange`; các queue `payment.queue`, `order.queue`, `notification.queue` tách công việc của từng consumer. Retry/phát lại đòi hỏi xử lý idempotent, xác nhận message và theo dõi backlog.
 
 Service chỉ truy cập DB của mình. PostgreSQL có thể dùng chung một container cho demo nhưng các database tách biệt. Redis có trong stack; giữ tồn hiện được bảo vệ bằng **SQL UPDATE có điều kiện trong transaction PostgreSQL**, không dùng Redis lock. Dữ liệu tồn có thẩm quyền nằm ở Order; trường `stock` của catalog không thay thế kiểm tra tồn khi đặt hàng.
 
@@ -64,6 +76,7 @@ sequenceDiagram
     participant O as Order & Inventory
     participant Q as RabbitMQ
     participant Pay as Payment
+    participant Provider as payOS
     participant N as Notification
     User->>G: Register / Login
     G->>I: REST
@@ -77,7 +90,19 @@ sequenceDiagram
     O-->>User: HTTP 201 (qua Gateway)
     O->>Q: Outbox publisher: OrderCreatedEvent
     Q->>Pay: payment.queue
-    Pay->>Pay: Transaction: kết quả mock + Outbox
+    alt PAYMENT_PROVIDER=mock (demo)
+        Pay->>Pay: Transaction: kết quả mock + Outbox
+    else PAYMENT_PROVIDER=payos
+        Pay->>Pay: Lưu payment PENDING và payment intent
+        Pay->>Provider: Worker tạo checkout link sau commit
+        User->>G: GET /api/payments/{orderId} + JWT
+        G->>Pay: Lấy checkoutUrl / QR
+        User->>Provider: Thanh toán qua checkout
+        Provider->>G: Webhook có chữ ký
+        G->>Pay: Chuyển webhook
+        Pay->>Pay: Xác minh chữ ký, số tiền, mã link; lưu kết quả + Outbox
+        Note over Pay,Provider: Worker reconciliation khi webhook bị thất lạc
+    end
     alt Thanh toán thành công
         Pay->>Q: PaymentSucceededEvent
         Q->>O: CONFIRMED, trừ tồn và giải phóng reservation
@@ -113,13 +138,134 @@ python infrastructure/postgres/run-performance-tests.py --services order-invento
 
 Các service khác dùng Gradle wrapper `test bootJar` trong thư mục service. Product integration test cần MongoDB test riêng; không dùng DB catalog đang demo. [CI](.github/workflows/ci.yml) mô tả môi trường test từng service.
 
+### 3.1. Sản phẩm đầu ra khi phân tích DDD và dữ liệu
+
+| Bước | Công việc | Tài liệu cần bàn giao |
+| --- | --- | --- |
+| Khảo sát nghiệp vụ | Xác định Customer/Admin, kênh bán, vòng đời đơn và trường hợp lỗi | Use case, thuật ngữ chung, sơ đồ event storming |
+| Chia domain | Xác định bounded context, aggregate root và invariant | Context map; bảng trách nhiệm và quyền sở hữu dữ liệu |
+| Thiết kế database | ERD riêng cho từng SQL database; document schema cho catalog; index/unique constraint | Schema, migration, quy tắc snapshot giá, lưu trữ và backup |
+| Thiết kế contract | REST method/path/DTO/status/auth; protobuf; event envelope/routing | OpenAPI, `.proto`, event catalog và quy tắc versioning |
+| Thiết kế nhất quán | Transaction cục bộ, giữ tồn có điều kiện, Outbox, Saga compensation, idempotency | Sequence diagram thành công/thất bại và ma trận retry/timeout |
+| Nghiệm chứng | Kiểm thử quyền, concurrency, rollback, event trùng và service dừng | Test report, dữ liệu đối chiếu, hạn chế còn tồn tại |
+
+API contract cần ghi rõ 401/403, validation, trạng thái xung đột, quyền sở hữu đơn và cách client xử lý PENDING. Khi thay đổi protobuf, không tái sử dụng field number đã bỏ. Event version mới phải tương thích consumer đang chạy; không giả định queue chỉ giao đúng một lần. Outbox không tạo một transaction chung giữa PostgreSQL và RabbitMQ: transaction chỉ bao phủ dữ liệu nghiệp vụ cùng bản ghi Outbox; publisher gửi sau commit và có thể phát lại.
+
 ## 4. Hướng dẫn triển khai lên VPS thực tế
 
-Thực hiện theo [hướng dẫn VPS Ubuntu](docs/day14-vps-deployment.md): chuẩn bị máy và domain → Docker Engine/Compose → cấu hình secret và GHCR → khởi động stack → Nginx → HTTPS Certbot → firewall → GitHub Actions → monitoring → nghiệm thu.
+### 4.1. Chuẩn bị Ubuntu và Docker
 
-File [Compose production](docker-compose.production.yml) chạy image GHCR. Các cổng được publish trên `127.0.0.1`; Nginx trên host chuyển `/api/` đến Gateway. [Mẫu Nginx](infrastructure/nginx/omnichannel.conf) chặn truy cập công khai vào Actuator. Identity, Order, Product và Payment nhận cùng `JWT_SECRET`. Prometheus thu metrics, Alloy gửi container logs vào Loki, Grafana có datasource/dashboard được provision sẵn.
+Dùng Ubuntu 22.04/24.04 LTS, cấu hình khởi đầu cho demo **4 vCPU, 8 GB RAM, SSD 50 GB**, domain trỏ A/AAAA đúng VPS và tài khoản SSH có sudo. Đây là cấu hình tham khảo; đo RAM, disk và tải thực tế trước khi đặt mục tiêu phục vụ. VPS chạy image không cần cài JDK.
 
-[Workflow deploy](.github/workflows/deploy.yml) chạy sau Docker Build & Push thành công trên main hoặc kích hoạt thủ công. Nó chờ toàn stack healthy bằng `compose up --wait`, trả lỗi khi quá hạn; không tự sửa swap hay dọn container toàn VPS. Cần bật branch protection và yêu cầu CI đạt trước khi merge. VPS/HTTPS và workflow remote phải được nghiệm thu trên máy thật; kết quả local không thay thế bước này.
+```bash
+sudo apt update
+sudo apt install -y ca-certificates curl git nginx ufw python3 snapd
+```
+
+Thiết lập apt repository theo [Docker Engine chính thức cho Ubuntu](https://docs.docker.com/engine/install/ubuntu/#install-using-the-repository), rồi cài:
+
+```bash
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo systemctl enable --now docker nginx
+sudo docker run --rm hello-world
+sudo usermod -aG docker "$USER"
+# Đăng xuất/đăng nhập lại trước khi dùng Docker không có sudo.
+docker compose version
+```
+
+Mở đúng cổng SSH trước khi bật UFW và kiểm tra bằng phiên SSH thứ hai. Ví dụ với SSH cổng 22:
+
+```bash
+sudo ufw allow 22/tcp
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+sudo ufw enable
+```
+
+Áp dụng chính sách tương ứng trên firewall nhà cung cấp. Docker published ports có thể vượt UFW: dùng Compose production với binding loopback và kiểm tra từ máy ngoài. Không mở public PostgreSQL, MongoDB, Redis, RabbitMQ hay bảng điều khiển monitoring.
+
+### 4.2. Repository, cấu hình và Docker Compose
+
+```bash
+sudo install -d -o "$USER" -g "$(id -gn)" /opt/omnichannel-ecommerce
+git clone https://github.com/vanh251/OMNICHANNEL-E-COMMERCE-PLATFORM.git /opt/omnichannel-ecommerce
+cd /opt/omnichannel-ecommerce
+# Chỉ tạo khi chưa có file cấu hình local.
+if [ ! -e .env ]; then cp .env.example .env; fi
+chmod 600 .env
+```
+
+Thay password mẫu và `JWT_SECRET` trong `.env`, giữ cùng JWT secret giữa Identity/Order/Product/Payment; không commit secret. Giữ hostname Docker và cổng nội bộ mặc định. Các database khởi tạo là `identity_db`, `order_db`, `payment_db`; init SQL chỉ chạy trên volume rỗng. Thay `.env` không tự đổi mật khẩu của database đã có dữ liệu.
+
+Đặt `IMAGE_PREFIX=ghcr.io/vanh251/omnichannel` (đổi owner nếu fork) và `IMAGE_TAG=sha-<7-ký-tự-commit-đã-build>`. Chạy workflow **Docker Build & Push** để có đủ sáu image. Với package private, dùng `docker login ghcr.io` và token có quyền đọc package qua prompt.
+
+- Demo/load test: `PAYMENT_PROVIDER=mock`, sử dụng môi trường riêng.
+- payOS: `PAYMENT_PROVIDER=payos`, cấu hình `PAYOS_CLIENT_ID`, `PAYOS_API_KEY`, `PAYOS_CHECKSUM_KEY` và return/cancel/webhook URL theo [hướng dẫn tích hợp](docs/payos-integration.md). Không dùng giao dịch tiền thật để chạy k6 hoặc runner mock.
+
+```bash
+docker compose -f docker-compose.production.yml config --quiet
+docker compose -f docker-compose.production.yml pull
+docker compose -f docker-compose.production.yml up -d --wait --wait-timeout 300
+docker compose -f docker-compose.production.yml ps
+curl -fsS http://127.0.0.1:8080/actuator/health
+```
+
+Khi lỗi, đọc `docker compose -f docker-compose.production.yml logs --tail=100 <service>`. Không chạy cùng lúc stack local và production vì dùng chung tên container/volume. Không dùng `down -v` để chữa lỗi; volume chứa dữ liệu. Xem [hướng dẫn VPS chi tiết](docs/day14-vps-deployment.md) về lưu trữ, backup và quyền truy cập.
+
+### 4.3. Nginx Reverse Proxy và SSL Certbot
+
+```bash
+sudo cp infrastructure/nginx/omnichannel.conf /etc/nginx/sites-available/omnichannel
+sudo nano /etc/nginx/sites-available/omnichannel
+```
+
+Đổi `server_name` trong mẫu thành domain của bạn. Mẫu proxy `/api/` tới `http://127.0.0.1:8080`, giữ URI và forward header; các đường dẫn khác trả 404 để không công khai Actuator. Nếu demo giới hạn IP, thêm allowlist tại `/api/`; giữ endpoint webhook payOS và thử thách ACME truy cập được. Webhook công khai vẫn bắt buộc chữ ký hợp lệ.
+
+```bash
+# Chỉ tạo symlink nếu chưa tồn tại.
+sudo ln -s /etc/nginx/sites-available/omnichannel /etc/nginx/sites-enabled/omnichannel
+sudo nginx -t
+sudo systemctl reload nginx
+# Thay api.example.com bằng domain thực, DNS và cổng 80 phải hoạt động.
+sudo snap install --classic certbot
+sudo /snap/bin/certbot --nginx -d api.example.com --redirect
+sudo /snap/bin/certbot renew --dry-run
+curl -f https://api.example.com/api/products
+```
+
+Kiểm tra HTTP chuyển sang HTTPS, certificate đúng domain, gia hạn tự động và `/actuator/prometheus` trả 404 từ Internet. Đổi cả URL payOS trong cấu hình/workflow nếu dùng domain khác mẫu hiện có. Tham khảo [Certbot](https://certbot.eff.org/).
+
+### 4.4. CI/CD GitHub Actions và rollback
+
+| Workflow | Công việc |
+| --- | --- |
+| [CI](.github/workflows/ci.yml) | Test service, test PostgreSQL và kiểm tra cấu hình hạ tầng |
+| [Docker Build & Push](.github/workflows/docker.yml) | Build sáu image và đẩy GHCR với `latest`, `sha-<7 ký tự>` |
+| [Deploy Production](.github/workflows/deploy.yml) | Sau build main thành công hoặc chạy thủ công trên main: SSH, checkout commit build, chọn image SHA, cập nhật payOS, pull/up và kiểm tra HTTPS/webhook |
+
+Cấu hình Actions secrets `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`, `VPS_PORT`; workflow deploy hiện cũng cần ba secret payOS nêu trên. SSH user cần quyền Docker và quyền đọc repository/GHCR không tương tác. Bật branch protection yêu cầu CI đạt; workflow build chạy độc lập nên build thành công chưa chứng minh test thành công.
+
+Workflow chờ toàn stack healthy và trả lỗi nếu HTTPS/webhook chưa đạt; không tự rollback. Lưu commit, image tag và backup trước deploy. Khi rollback, dùng cấu hình tương thích, đặt `IMAGE_TAG` về tag đã nghiệm thu rồi `pull`/`up --wait`. Rollback image không khôi phục database; cần diễn tập backup/restore và migration tương thích.
+
+### 4.5. Monitoring: Prometheus, Grafana, Loki và Alloy
+
+Stack đã có sẵn:
+
+- [Prometheus](infrastructure/prometheus/prometheus.yml) scrape `/actuator/prometheus` của sáu service mỗi 15 giây.
+- [Grafana provisioning](infrastructure/grafana/provisioning/datasources/datasources.yml) khai báo datasource Prometheus/Loki; [dashboard](infrastructure/grafana/dashboards/ecommerce-overview.json) hiển thị tình trạng service và số liệu ứng dụng.
+- [Grafana Alloy](infrastructure/alloy/config.alloy) thu log container và đẩy vào [Loki](infrastructure/loki/loki.yml). Cấu hình hiện tại dùng Alloy; không cần thêm Promtail.
+
+Truy cập bảng điều khiển qua SSH tunnel từ máy cá nhân:
+
+```bash
+ssh -p <ssh-port> -L 3000:127.0.0.1:3000 -L 9090:127.0.0.1:9090 -L 15672:127.0.0.1:15672 <user>@<vps>
+```
+
+Mở Grafana ở localhost:3000, Prometheus `/targets` ở localhost:9090 và RabbitMQ ở localhost:15672. Xác nhận sáu targets UP, dashboard có RPS/p95/error rate khi tạo tải và Loki tìm được log theo orderId. CPU/RAM toàn host/container cần exporter tương ứng nếu muốn đo ngoài metrics JVM hiện có. Thiết lập cảnh báo service down, backlog tăng, lỗi 5xx và disk gần đầy; xem [hướng dẫn monitoring và PromQL](docs/day13-monitoring-load-test.md).
+
+VPS/HTTPS, deploy remote và giao dịch payOS thực phải được nghiệm thu riêng; kết quả local không thay thế bằng chứng trên máy thật.
 
 ## 5. Tiêu chí đánh giá và yêu cầu bài làm
 
@@ -133,6 +279,28 @@ File [Compose production](docker-compose.production.yml) chạy image GHCR. Các
 | Hiệu năng | Báo cáo target/achieved RPS, p95, lỗi và dropped iterations. Mục tiêu Day 13 p95 < 2000 ms, lỗi < 1%, không bỏ iteration; không tính lỗi hết hàng chủ đích của flash sale là lỗi tải thông thường |
 | Vận hành | Compose healthy; API qua HTTPS thật; TLS renewal thử thành công; chỉ mở SSH/HTTP/HTTPS; kiểm tra từ máy ngoài; Prometheus targets UP, dashboard Grafana và logs Loki |
 | Bài nộp | Source và test/build; README, architecture/sequence diagram, API/event contract; JSON kết quả demo; kết quả k6; bằng chứng VPS/HTTPS/CI/monitoring và danh sách hạn chế |
+
+### 5.1. Chỉ số đo lường và cách chấm
+
+Báo cáo phải ghi cấu hình máy, commit/image tag, dữ liệu ban đầu, thời gian chạy và tải mục tiêu so với tải đạt được. Tách latency HTTP tạo đơn khỏi thời gian hoàn tất Saga. Với bài test tải bình thường, báo cáo p50/p95/p99, throughput, error rate, dropped iterations, CPU/RAM và queue backlog; với flash sale, đo số đơn được chấp nhận cùng invariant tồn kho. 500 worker đồng thời không đồng nghĩa 500 requests/giây.
+
+Gợi ý thang điểm: kiến trúc và DDD **20%**, chức năng/API/bảo mật **25%**, nhất quán và chịu lỗi **25%**, VPS/CI/CD/monitoring **20%**, tài liệu và demo **10%**. Mục tiêu tải 500–1000 RPS là mục tiêu bài tập cần có bằng chứng đo, không phải cam kết hệ thống hiện đã đạt.
+
+### 5.2. Kịch bản demo bắt buộc
+
+1. **Luồng thành công:** đăng ký/đăng nhập, ADMIN tạo sản phẩm và tồn, khách tạo đơn; theo dõi payment, CONFIRMED và log thông báo cùng orderId.
+2. **Flash sale:** tồn 10, 500 worker qua barrier; trình bày 10 đơn được chấp nhận, 490 lỗi thiếu tồn và đối chiếu số tồn sau Saga.
+3. **Thanh toán thất bại:** trên mock, amount > 10000 dẫn tới FAILED/CANCELLED; tồn được hoàn và reserved về 0.
+4. **Sự cố Notification:** dừng service, chứng minh Order/Payment vẫn xử lý; khởi động lại, chứng minh queue được tiêu thụ và log xuất hiện.
+5. **Bảo mật và phát lại:** token thiếu/sai, người khác đọc payment, khách ghi catalog; đối chiếu 401/403 và quyền ADMIN. Phát lại event để kiểm tra không trừ kho/thu tiền lần hai; báo cáo giới hạn dedup Notification.
+6. **Vận hành:** truy cập API bằng domain HTTPS, lần CI/deploy thành công, dashboard metric/log, chứng chỉ và kiểm tra cổng từ máy ngoài.
+7. **payOS nếu chọn nghiệm thu tích hợp:** tạo checkout với số tiền nhỏ đã thống nhất, xác minh webhook/Saga; chứng minh return URL hoặc webhook sai chữ ký không thể tự xác nhận thanh toán. Ghi rõ hoàn tiền thật chưa hỗ trợ.
+
+```bash
+# Cần PAYMENT_PROVIDER=mock và ADMIN fixture theo tài liệu bảo mật.
+python3 infrastructure/day14/run-demo.py
+python3 infrastructure/k6/run-load-test.py --rates 500 1000 --duration 30
+```
 
 Demo bắt buộc: chạy runner Day 14, trình bày 10/490 và đối chiếu tồn; trình bày compensation; dừng/khôi phục Notification; mở dashboard/log theo orderId; truy cập domain HTTPS và trình bày lần deploy thành công. Runner tạo SKU/user riêng, giữ fixture để xem lại và tự khởi động lại Notification trong `finally` khi gặp lỗi; chỉ dùng trên môi trường demo không có khách hàng thật.
 
