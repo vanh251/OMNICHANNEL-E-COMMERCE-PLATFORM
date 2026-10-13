@@ -28,7 +28,7 @@ public class ProductServiceClientGrpcImpl implements ProductServiceClient {
 
             VerifyProductResponse response = productGrpcStub.verifyProductDetails(request);
 
-            if (response.getValid()) {
+            if (response.getValid() && response.getProductId().equals(productId)) {
                 // Return exactly the product name and price from Product Service
                 return new ProductInfo(response.getName(), BigDecimal.valueOf(response.getPrice()));
             } else {
