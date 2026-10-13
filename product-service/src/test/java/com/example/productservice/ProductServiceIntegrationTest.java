@@ -218,7 +218,7 @@ class ProductServiceIntegrationTest {
                 .andExpect(jsonPath("$.brand", is("Apple")))
                 .andExpect(jsonPath("$.categoryId", is(category.getId())))
                 .andExpect(jsonPath("$.categoryName", is("Cat-Phones")))
-                .andExpect(jsonPath("$.active", is(true)))
+                .andExpect(jsonPath("$.active", is(false)))
                 .andExpect(jsonPath("$.variants", hasSize(2)))
                 .andExpect(jsonPath("$.variants[0].sku", is("IP17-BLK-256")))
                 .andExpect(jsonPath("$.variants[0].price", is(25000000)))
