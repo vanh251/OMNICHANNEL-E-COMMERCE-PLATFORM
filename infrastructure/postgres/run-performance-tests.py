@@ -20,12 +20,37 @@ ROOT = Path(__file__).resolve().parents[2]
 RESULTS = ROOT / "infrastructure/k6/results"
 
 
-def run_checked(command, **kwargs):
+def run_checked(command, *, operation, secret_values=(), **kwargs):
     result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True,
                             encoding="utf-8", errors="replace", **kwargs)
     if result.returncode:
-        raise RuntimeError("Docker Compose operation failed; check PostgreSQL health and Docker access")
+        detail = result.stderr.strip()
+        for secret in secret_values:
+            if secret:
+                detail = detail.replace(secret, "***")
+        detail = detail[-1200:]
+        message = f"{operation} failed (exit {result.returncode})"
+        raise RuntimeError(f"{message}: {detail}" if detail else message)
     return result.stdout
+
+
+def start_postgres(image, credentials, environment):
+    for attempt in range(1, 4):
+        container = f"performance-postgres-{uuid.uuid4().hex[:12]}"
+        try:
+            run_checked(["docker", "run", "--rm", "-d", "--name", container,
+                         "-e", "POSTGRES_USER", "-e", "POSTGRES_PASSWORD",
+                         "-p", "127.0.0.1::5432", image],
+                        operation=f"Start PostgreSQL container (attempt {attempt}/3)",
+                        secret_values=(credentials["POSTGRES_PASSWORD"],), env=environment)
+            return container
+        except RuntimeError as error:
+            subprocess.run(["docker", "rm", "-f", container], cwd=ROOT,
+                           capture_output=True, check=False)
+            if attempt == 3:
+                raise
+            print(f"{error}; retrying", flush=True)
+            time.sleep(2 * attempt)
 
 
 def main():
@@ -36,14 +61,13 @@ def main():
                         default=["order-inventory-service", "payment-service"])
     args = parser.parse_args()
     compose = ["docker", "compose", "--env-file", args.env_file, "-f", args.compose_file]
-    config = json.loads(run_checked(compose + ["config", "--format", "json"]))
-    container = f"performance-postgres-{uuid.uuid4().hex[:12]}"
+    config = json.loads(run_checked(compose + ["config", "--format", "json"],
+                                    operation="Read Docker Compose configuration"))
     credentials = {"POSTGRES_USER": "postgres", "POSTGRES_PASSWORD": secrets.token_urlsafe(24)}
     environment = os.environ.copy()
     environment.update(credentials)
-    run_checked(["docker", "run", "--rm", "-d", "--name", container,
-                 "-e", "POSTGRES_USER", "-e", "POSTGRES_PASSWORD", "-p", "127.0.0.1::5432",
-                 config["services"]["postgres"]["image"]], env=environment)
+    container = start_postgres(config["services"]["postgres"]["image"],
+                               credentials, environment)
     try:
         deadline = time.monotonic() + 60
         while True:
@@ -54,12 +78,16 @@ def main():
             if time.monotonic() >= deadline:
                 raise RuntimeError("Disposable PostgreSQL did not become ready")
             time.sleep(0.5)
-        port = run_checked(["docker", "port", container, "5432/tcp"]).strip().rsplit(":", 1)[1]
+        port = run_checked(["docker", "port", container, "5432/tcp"],
+                           operation="Read PostgreSQL host port").strip().rsplit(":", 1)[1]
         psql = ["docker", "exec", "-i", container, "psql", "-U", "postgres", "-d", "postgres",
                 "-X", "-v", "ON_ERROR_STOP=1"]
         return run_service_tests(psql, port, credentials, args.services)
     finally:
-        run_checked(["docker", "stop", container])
+        stopped = subprocess.run(["docker", "stop", container], cwd=ROOT,
+                                 capture_output=True, text=True, check=False)
+        if stopped.returncode:
+            print("Warning: disposable PostgreSQL container could not be stopped", flush=True)
 
 
 def run_service_tests(psql, port, credentials, services):
@@ -68,7 +96,8 @@ def run_service_tests(psql, port, credentials, services):
     for service in services:
         suffix = "order" if service == "order-inventory-service" else "payment"
         database = f"performance_test_{suffix}_{uuid.uuid4().hex[:12]}"
-        run_checked(psql, input=f'CREATE DATABASE "{database}";')
+        run_checked(psql, operation="Create performance test database",
+                    input=f'CREATE DATABASE "{database}";')
         try:
             environment = os.environ.copy()
             environment.update({
@@ -94,7 +123,8 @@ def run_service_tests(psql, port, credentials, services):
             print(f"{service}: {'PASS' if success else 'FAIL'} {counts}; log: {log.relative_to(ROOT)}", flush=True)
             passed = passed and success
         finally:
-            run_checked(psql, input=f'DROP DATABASE "{database}" WITH (FORCE);')
+            run_checked(psql, operation="Drop performance test database",
+                        input=f'DROP DATABASE "{database}" WITH (FORCE);')
     return 0 if passed else 1
 
 
