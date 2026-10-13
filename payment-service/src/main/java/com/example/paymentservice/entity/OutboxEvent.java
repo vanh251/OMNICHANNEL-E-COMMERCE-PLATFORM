@@ -7,7 +7,8 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "outbox_events")
+@Table(name = "outbox_events", indexes =
+        @Index(name = "idx_outbox_pending_id", columnList = "published,id"))
 @Getter
 @NoArgsConstructor
 public class OutboxEvent {

@@ -1,13 +1,16 @@
 package com.example.paymentservice.repository;
 
 import com.example.paymentservice.entity.OutboxEvent;
-import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 
 public interface OutboxEventRepository extends JpaRepository<OutboxEvent, Long> {
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    List<OutboxEvent> findTop20ByPublishedFalseOrderByIdAsc();
+    @Query(value = """
+            SELECT * FROM outbox_events WHERE published = false
+            ORDER BY id LIMIT :batchSize FOR UPDATE SKIP LOCKED
+            """, nativeQuery = true)
+    List<OutboxEvent> findPendingBatch(@Param("batchSize") int batchSize);
 }

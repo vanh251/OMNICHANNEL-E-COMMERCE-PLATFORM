@@ -28,6 +28,16 @@ public class RabbitMQConfig {
     }
 
     @Bean
+    public Binding orderCancelledPaymentBinding(@Qualifier("paymentQueue") Queue queue, TopicExchange exchange) {
+        return BindingBuilder.bind(queue).to(exchange).with("order.cancelled");
+    }
+
+    @Bean
+    public Binding paymentRefundedNotificationBinding(@Qualifier("notificationQueue") Queue queue, TopicExchange exchange) {
+        return BindingBuilder.bind(queue).to(exchange).with("payment.refunded");
+    }
+
+    @Bean
     public Binding paymentSucceededOrderBinding(@Qualifier("orderQueue") Queue orderQueue, TopicExchange ecommerceExchange) {
         return BindingBuilder.bind(orderQueue).to(ecommerceExchange).with("payment.succeeded");
     }

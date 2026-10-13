@@ -1,4 +1,7 @@
 # Kiến trúc Hệ thống
+
+> Tài liệu này mô tả kiến trúc mục tiêu. Sơ đồ implementation và sequence Day 14 ở [README](../README.md#2-phân-tích-kiến-trúc-microservices): RabbitMQ, PostgreSQL/MongoDB, gRPC Order → Product, giữ tồn bằng SQL transaction, payment giả lập và notification qua log. Redis lock, Elasticsearch, rate limiting và email/payment provider thật đề cập bên dưới chưa được nghiệm thu là chức năng hiện hữu.
+
 ## Nền tảng Thương mại Điện tử Đa kênh (Omnichannel E-Commerce)
 
 ### 1. Kiến trúc Tổng thể của Hệ thống

@@ -17,6 +17,12 @@ public class PaymentResponse {
     private String paymentMethod;
     private PaymentStatus status;
     private String transactionId;
+    private Long providerOrderCode;
+    private String paymentLinkId;
+    private String checkoutUrl;
+    private String qrCode;
+    private Long expiresAt;
+    private boolean refundRequired;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

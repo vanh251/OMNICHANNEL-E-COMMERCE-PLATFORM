@@ -1,6 +1,9 @@
+jwt:
+  secret: payment-test-secret-at-least-32-bytes-long
+
 spring:
   datasource:
-    url: jdbc:h2:mem:testdb
+    url: jdbc:h2:mem:testdb;MODE=PostgreSQL
     driver-class-name: org.h2.Driver
     username: sa
     password: 
@@ -24,3 +27,6 @@ spring:
     
 server:
   port: 0
+
+outbox:
+  enabled: false

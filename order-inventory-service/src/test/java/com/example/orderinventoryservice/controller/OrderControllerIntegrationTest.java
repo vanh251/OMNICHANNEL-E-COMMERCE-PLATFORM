@@ -352,7 +352,7 @@ class OrderControllerIntegrationTest {
     }
 
     @Test
-    @DisplayName("POST /api/orders/{id}/cancel - Already cancelled (400)")
+    @DisplayName("POST /api/orders/{id}/cancel - Already cancelled (409)")
     void cancelOrder_alreadyCancelled() throws Exception {
         // Create and cancel
         CreateOrderRequest request = CreateOrderRequest.builder()
@@ -381,7 +381,7 @@ class OrderControllerIntegrationTest {
         // Cancel again should fail
         mockMvc.perform(post("/api/orders/{id}/cancel", created.getId())
                         .with(authentication(createAuth(USER_ID, USER_EMAIL))))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isConflict());
     }
 
     @Test
