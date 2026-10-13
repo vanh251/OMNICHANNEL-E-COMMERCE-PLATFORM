@@ -26,10 +26,11 @@ class StockReportTest(unittest.TestCase):
             request.assert_not_called()
 
     def test_catalog_fixtures_use_admin_but_register_customer_without_it(self):
-        args = SimpleNamespace(base_url="http://localhost:8080", duration=1)
+        args = SimpleNamespace(base_url="http://localhost:8080", duration=1, settle_timeout=120)
         with patch.object(load_test, "fixture_admin_token", return_value="admin-token"), \
                 patch.object(load_test, "request_json", side_effect=[{}, {"id": "cat"}, {"id": "product"}]) as request, \
-                patch.object(load_test, "sql"):
+                patch.object(load_test, "wait_for_inventory_sync"), \
+                patch.object(load_test, "snapshot", return_value={"availableStock": 101}):
             load_test.prepare_fixture(args, "order_db", 1)
         self.assertEqual(3, len(request.call_args_list[0].args))
         self.assertEqual("admin-token", request.call_args_list[1].args[3])

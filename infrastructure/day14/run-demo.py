@@ -89,14 +89,12 @@ class Demo:
         }, self.admin_token, expected=201)
         product_id = product["id"]
         require(re.fullmatch(r"[A-Za-z0-9_-]+", product_id), "Unexpected product ID")
-        # Operator setup in the owning DB: there is no inventory write endpoint.
-        load_test.sql(self.args, self.database, f"""
-            INSERT INTO inventory
-                (product_id, sku, total_stock, reserved_stock, available_stock, created_at, updated_at)
-            VALUES ('{product_id}', '{sku}', {stock}, 0, {stock}, NOW(), NOW());
-        """)
-        fetched = api(self.args, "GET", f"/api/products/{product_id}")
+        fetched = eventually(lambda: api(self.args, "GET", f"/api/products/{product_id}"),
+                             lambda value: value["active"], self.args.timeout,
+                             f"inventory sync for product {product_id}")
         require(any(v["sku"] == sku for v in fetched["variants"]), "Product preflight failed")
+        require(self.snapshot({"sku": sku})["availableStock"] == stock,
+                "Inventory sync did not create the expected initial stock")
         return {"productId": product_id, "sku": sku, "initialStock": stock}
 
     def order_body(self, fixture):
