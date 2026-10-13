@@ -71,12 +71,16 @@ def main():
     try:
         deadline = time.monotonic() + 60
         while True:
-            ready = subprocess.run(["docker", "exec", container, "pg_isready", "-U", "postgres"],
+            # The official image starts a socket-only server for init scripts,
+            # then stops it before starting the final TCP server.
+            ready = subprocess.run(["docker", "exec", container, "pg_isready",
+                                    "-h", "127.0.0.1", "-p", "5432",
+                                    "-U", "postgres", "-d", "postgres"],
                                    capture_output=True)
             if ready.returncode == 0:
                 break
             if time.monotonic() >= deadline:
-                raise RuntimeError("Disposable PostgreSQL did not become ready")
+                raise RuntimeError("Disposable PostgreSQL did not accept TCP connections")
             time.sleep(0.5)
         port = run_checked(["docker", "port", container, "5432/tcp"],
                            operation="Read PostgreSQL host port").strip().rsplit(":", 1)[1]
