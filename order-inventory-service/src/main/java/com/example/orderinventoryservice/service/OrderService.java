@@ -45,8 +45,7 @@ public class OrderService {
             "PENDING->CONFIRMED",
             "CONFIRMED->SHIPPING",
             "SHIPPING->COMPLETED",
-            "PENDING->CANCELLED",
-            "CONFIRMED->CANCELLED"
+            "PENDING->CANCELLED"
     );
 
     @Transactional

@@ -11,6 +11,10 @@ public class OpenApiConfig {
     @Bean
     public OpenAPI productOpenAPI() {
         return new OpenAPI()
+                .components(new io.swagger.v3.oas.models.Components().addSecuritySchemes("BearerAuth",
+                        new io.swagger.v3.oas.models.security.SecurityScheme()
+                                .type(io.swagger.v3.oas.models.security.SecurityScheme.Type.HTTP)
+                                .scheme("bearer").bearerFormat("JWT")))
                 .info(new Info()
                         .title("Product Service API")
                         .version("1.0")

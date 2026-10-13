@@ -18,7 +18,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${IDENTITY_DB}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./infrastructure/postgres/init:/docker-entrypoint-initdb.d
@@ -43,7 +43,7 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
       MONGO_INITDB_DATABASE: ${MONGO_DATABASE}
     ports:
-      - "${MONGO_PORT:-27017}:27017"
+      - "127.0.0.1:${MONGO_PORT:-27017}:27017"
     volumes:
       - mongodb_data:/data/db
     healthcheck:
@@ -67,7 +67,7 @@ services:
       - --requirepass
       - ${REDIS_PASSWORD}
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -91,8 +91,8 @@ services:
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
       RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST}
     ports:
-      - "${RABBITMQ_PORT:-5672}:5672"
-      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+      - "127.0.0.1:${RABBITMQ_PORT:-5672}:5672"
+      - "127.0.0.1:${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
@@ -127,7 +127,7 @@ services:
       JWT_ACCESS_EXPIRATION: ${JWT_ACCESS_EXPIRATION}
       JWT_REFRESH_EXPIRATION: ${JWT_REFRESH_EXPIRATION}
     ports:
-      - "${IDENTITY_SERVICE_PORT:-8081}:8081"
+      - "127.0.0.1:${IDENTITY_SERVICE_PORT:-8081}:8081"
     depends_on:
       postgres:
         condition: service_healthy
@@ -148,6 +148,7 @@ services:
     logging: *service-logging
     restart: unless-stopped
     environment:
+      JWT_SECRET: ${JWT_SECRET}
       JAVA_TOOL_OPTIONS: "-Xms256m -Xmx512m"
       PRODUCT_SERVICE_PORT: ${PRODUCT_SERVICE_PORT:-8082}
       MONGO_HOST: ${MONGO_HOST:-mongodb}
@@ -184,6 +185,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       ORDER_DB: ${ORDER_DB}
+      JWT_SECRET: ${JWT_SECRET}
       REDIS_HOST: ${REDIS_HOST:-redis}
       REDIS_PORT: ${REDIS_PORT:-6379}
       REDIS_PASSWORD: ${REDIS_PASSWORD}
@@ -223,6 +225,16 @@ services:
     logging: *service-logging
     restart: unless-stopped
     environment:
+      PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-mock}
+      PAYOS_CLIENT_ID: ${PAYOS_CLIENT_ID:-}
+      PAYOS_API_KEY: ${PAYOS_API_KEY:-}
+      PAYOS_CHECKSUM_KEY: ${PAYOS_CHECKSUM_KEY:-}
+      PAYOS_RETURN_URL: ${PAYOS_RETURN_URL:-http://localhost:8080/api/payments/payos/return}
+      PAYOS_CANCEL_URL: ${PAYOS_CANCEL_URL:-http://localhost:8080/api/payments/payos/cancel}
+      PAYOS_TIMEOUT_MS: ${PAYOS_TIMEOUT_MS:-10000}
+      PAYOS_LINK_TTL_SECONDS: ${PAYOS_LINK_TTL_SECONDS:-900}
+      PAYOS_POLL_MS: ${PAYOS_POLL_MS:-15000}
+      JWT_SECRET: ${JWT_SECRET}
       JAVA_TOOL_OPTIONS: "-Xms256m -Xmx512m"
       PAYMENT_SERVICE_PORT: ${PAYMENT_SERVICE_PORT:-8084}
       POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
@@ -297,7 +309,7 @@ services:
     logging: *service-logging
     restart: unless-stopped
     ports:
-      - "${GATEWAY_PORT:-8080}:8080"
+      - "127.0.0.1:${GATEWAY_PORT:-8080}:8080"
     environment:
       JAVA_TOOL_OPTIONS: "-Xms256m -Xmx512m"
       GATEWAY_PORT: ${GATEWAY_PORT:-8080}

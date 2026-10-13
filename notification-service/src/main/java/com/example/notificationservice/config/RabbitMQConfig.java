@@ -47,6 +47,11 @@ public class RabbitMQConfig {
     }
 
     @Bean
+    public Binding paymentRefundedBinding(Queue notificationQueue, TopicExchange ecommerceExchange) {
+        return BindingBuilder.bind(notificationQueue).to(ecommerceExchange).with("payment.refunded");
+    }
+
+    @Bean
     public MessageConverter jsonMessageConverter() {
         return new Jackson2JsonMessageConverter();
     }

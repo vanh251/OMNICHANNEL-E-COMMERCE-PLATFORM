@@ -12,6 +12,29 @@ spec.loader.exec_module(load_test)
 
 
 class StockReportTest(unittest.TestCase):
+    def test_real_payos_mode_is_rejected_before_load_test_setup(self):
+        config = {"services": {"payment-service": {"environment": {"PAYMENT_PROVIDER": "payos"}}}}
+        args = SimpleNamespace(env_file=".env", compose_file="docker-compose.yml")
+        with patch.object(load_test, "run_command", return_value=load_test.json.dumps(config)):
+            with self.assertRaisesRegex(RuntimeError, "PAYMENT_PROVIDER=mock"):
+                load_test.order_database(args)
+
+    def test_missing_admin_credentials_fails_before_login(self):
+        with patch.dict(load_test.os.environ, {}, clear=True), patch.object(load_test, "request_json") as request:
+            with self.assertRaisesRegex(RuntimeError, "FIXTURE_ADMIN_EMAIL"):
+                load_test.fixture_admin_token("http://localhost:8080")
+            request.assert_not_called()
+
+    def test_catalog_fixtures_use_admin_but_register_customer_without_it(self):
+        args = SimpleNamespace(base_url="http://localhost:8080", duration=1)
+        with patch.object(load_test, "fixture_admin_token", return_value="admin-token"), \
+                patch.object(load_test, "request_json", side_effect=[{}, {"id": "cat"}, {"id": "product"}]) as request, \
+                patch.object(load_test, "sql"):
+            load_test.prepare_fixture(args, "order_db", 1)
+        self.assertEqual(3, len(request.call_args_list[0].args))
+        self.assertEqual("admin-token", request.call_args_list[1].args[3])
+        self.assertEqual("admin-token", request.call_args_list[2].args[3])
+
     def snapshot(self, **changes):
         result = {"totalStock": 7, "reservedStock": 2, "availableStock": 5,
                   "createdOrders": 6, "pendingOrders": 2, "confirmedOrders": 3,

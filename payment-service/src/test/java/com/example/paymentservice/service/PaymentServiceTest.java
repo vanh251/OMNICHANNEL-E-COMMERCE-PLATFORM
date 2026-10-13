@@ -33,6 +33,17 @@ public class PaymentServiceTest {
     @Mock
     private OutboxEventRepository outboxEventRepository;
 
+    @Mock
+    private com.example.paymentservice.repository.PaymentOrderStateRepository orderStateRepository;
+
+    @Mock
+    private jakarta.validation.Validator validator;
+
+    private com.example.paymentservice.entity.PaymentOrderState orderState;
+
+    private final com.example.paymentservice.security.JwtUserPrincipal owner =
+            new com.example.paymentservice.security.JwtUserPrincipal(1L, "owner@example.test", "USER");
+
     @Spy
     private ObjectMapper objectMapper = new ObjectMapper();
 
@@ -44,7 +55,11 @@ public class PaymentServiceTest {
 
     @BeforeEach
     void setUp() {
+        orderState = new com.example.paymentservice.entity.PaymentOrderState();
+        orderState.setOrderId("ORD-123");
+        lenient().when(orderStateRepository.lockByOrderId("ORD-123")).thenReturn(orderState);
         paymentRequest = new PaymentRequest();
+        paymentRequest.setCustomerId(1L);
         paymentRequest.setOrderId("ORD-123");
         paymentRequest.setAmount(new BigDecimal("150.00"));
         paymentRequest.setCurrency("VND");
@@ -53,6 +68,7 @@ public class PaymentServiceTest {
         payment = Payment.builder()
                 .id(1L)
                 .orderId("ORD-123")
+                .customerId(1L)
                 .amount(new BigDecimal("150.00"))
                 .currency("VND")
                 .paymentMethod("CREDIT_CARD")
@@ -122,7 +138,7 @@ public class PaymentServiceTest {
     void getPaymentByOrderId_Success() {
         when(paymentRepository.findByOrderId("ORD-123")).thenReturn(Optional.of(payment));
 
-        PaymentResponse response = paymentService.getPaymentByOrderId("ORD-123");
+        PaymentResponse response = paymentService.getPaymentByOrderId("ORD-123", owner);
 
         assertNotNull(response);
         assertEquals("ORD-123", response.getOrderId());
@@ -134,12 +150,14 @@ public class PaymentServiceTest {
         when(paymentRepository.findByOrderId("ORD-999")).thenReturn(Optional.empty());
 
         assertThrows(PaymentNotFoundException.class, () -> {
-            paymentService.getPaymentByOrderId("ORD-999");
+            paymentService.getPaymentByOrderId("ORD-999", owner);
         });
     }
 
     @Test
     void refundPayment_Success() {
+        orderState.setCancelled(true);
+        when(paymentRepository.findOrderIdById(1L)).thenReturn(Optional.of("ORD-123"));
         when(paymentRepository.findById(1L)).thenReturn(Optional.of(payment));
         when(paymentRepository.save(any(Payment.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -152,6 +170,8 @@ public class PaymentServiceTest {
     @Test
     void refundPayment_FailedNotSuccess() {
         payment.setStatus(PaymentStatus.FAILED);
+        orderState.setCancelled(true);
+        when(paymentRepository.findOrderIdById(1L)).thenReturn(Optional.of("ORD-123"));
         when(paymentRepository.findById(1L)).thenReturn(Optional.of(payment));
 
         assertThrows(IllegalStateException.class, () -> {

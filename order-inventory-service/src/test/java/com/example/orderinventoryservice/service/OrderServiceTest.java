@@ -279,18 +279,16 @@ class OrderServiceTest {
         }
 
         @Test
-        @DisplayName("11. Cancel CONFIRMED Success")
-        void cancelOrder_confirmedSuccess() {
-            // Given
+        @DisplayName("11. Cancel CONFIRMED is rejected without changing stock or publishing")
+        void cancelOrder_confirmedRejected() {
             Order order = createMockOrder(OrderStatus.CONFIRMED);
             when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
-            when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-            // When
-            OrderResponse response = orderService.cancelOrder(1L, USER_ID, USER_EMAIL);
-
-            // Then
-            assertThat(response.getStatus()).isEqualTo("CANCELLED");
+            assertThatThrownBy(() -> orderService.cancelOrder(1L, USER_ID, USER_EMAIL))
+                    .isInstanceOf(InvalidOrderStatusException.class);
+            assertThat(order.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
+            verify(orderRepository, never()).save(any());
+            verifyNoInteractions(inventoryService, eventPublisher);
         }
 
         @Test

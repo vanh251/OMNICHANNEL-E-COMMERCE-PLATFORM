@@ -296,3 +296,15 @@ jobs:
 
       - name: Test stock report reconciliation
         run: python -m unittest discover -s infrastructure/k6 -p "test_*.py"
+
+      - name: Test Day 14 acceptance checks and outage recovery
+        run: python -m unittest discover -s infrastructure/day14 -p "test_*.py"
+
+      - name: Test payOS deployment configuration
+        run: python -m unittest discover -s infrastructure/payos -p "test_*.py"
+
+      - name: Validate Nginx reverse proxy
+        run: >-
+          docker run --rm
+          -v "$PWD/infrastructure/nginx/omnichannel.conf:/etc/nginx/conf.d/default.conf:ro"
+          nginx:stable-alpine nginx -t

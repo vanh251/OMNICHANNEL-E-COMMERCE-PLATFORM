@@ -1,9 +1,31 @@
+jwt:
+  secret: ${JWT_SECRET}
+
+payment:
+  provider: ${PAYMENT_PROVIDER:mock}
+
+payos:
+  client-id: ${PAYOS_CLIENT_ID:}
+  api-key: ${PAYOS_API_KEY:}
+  checksum-key: ${PAYOS_CHECKSUM_KEY:}
+  return-url: ${PAYOS_RETURN_URL:http://localhost:8080/api/payments/payos/return}
+  cancel-url: ${PAYOS_CANCEL_URL:http://localhost:8080/api/payments/payos/cancel}
+  timeout-ms: ${PAYOS_TIMEOUT_MS:10000}
+  link-ttl-seconds: ${PAYOS_LINK_TTL_SECONDS:900}
+  worker-enabled: ${PAYOS_WORKER_ENABLED:true}
+  poll-ms: ${PAYOS_POLL_MS:15000}
+
 server:
   port: ${PAYMENT_SERVICE_PORT:8084}
 
 spring:
   application:
     name: payment-service
+
+  task:
+    scheduling:
+      pool:
+        size: 2
 
   datasource:
     url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${PAYMENT_DB:payment_db}

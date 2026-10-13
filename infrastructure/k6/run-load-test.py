@@ -21,11 +21,14 @@ ROOT = Path(__file__).resolve().parents[2]
 RESULTS = ROOT / "infrastructure/k6/results"
 
 
-def request_json(base_url, path, body):
+def request_json(base_url, path, body, token=None):
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     request = urllib.request.Request(
         base_url.rstrip("/") + path,
         data=json.dumps(body).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
+        headers=headers,
         method="POST",
     )
     try:
@@ -34,6 +37,15 @@ def request_json(base_url, path, body):
     except urllib.error.HTTPError as error:
         # Do not print request bodies, which can include login credentials.
         raise RuntimeError(f"{path} returned HTTP {error.code}") from None
+
+
+def fixture_admin_token(base_url):
+    email = os.environ.get("FIXTURE_ADMIN_EMAIL")
+    password = os.environ.get("FIXTURE_ADMIN_PASSWORD")
+    if not email or not password:
+        raise RuntimeError("Set FIXTURE_ADMIN_EMAIL and FIXTURE_ADMIN_PASSWORD for an existing ADMIN fixture account")
+    auth = request_json(base_url, "/api/auth/login", {"email": email, "password": password})
+    return auth["accessToken"]
 
 
 def compose_command(args):
@@ -51,6 +63,8 @@ def run_command(command, **kwargs):
 def order_database(args):
     # Resolve customized database names through Compose without printing credentials.
     config = json.loads(run_command(compose_command(args) + ["config", "--format", "json"]))
+    if config["services"]["payment-service"]["environment"].get("PAYMENT_PROVIDER", "mock") != "mock":
+        raise RuntimeError("Day 13 load tests require PAYMENT_PROVIDER=mock; do not load-test a real payOS channel")
     return config["services"]["order-inventory-service"]["environment"]["ORDER_DB"]
 
 
@@ -64,6 +78,7 @@ def sql(args, database, statement):
 
 
 def prepare_fixture(args, database, rate):
+    admin_token = fixture_admin_token(args.base_url)
     run_id = f"day13-{rate}-{uuid.uuid4().hex[:12]}"
     email = f"{run_id}@example.test"
     password = secrets.token_urlsafe(24)
@@ -72,13 +87,13 @@ def prepare_fixture(args, database, rate):
     request_json(args.base_url, "/api/auth/register", {
         "firstName": "Load", "lastName": "Test", "email": email, "password": password,
     })
-    category = request_json(args.base_url, "/api/categories", {"name": run_id})
+    category = request_json(args.base_url, "/api/categories", {"name": run_id}, admin_token)
     product = request_json(args.base_url, "/api/products", {
         "name": run_id,
         "categoryId": category["id"],
         # Mock payments succeed for amounts <= 10000; avoid compensation in a capacity test.
         "variants": [{"sku": sku, "name": "Load test", "price": 1000, "stock": stock}],
-    })
+    }, admin_token)
     product_id = product["id"]
     if not re.fullmatch(r"[A-Za-z0-9_-]+", product_id):
         raise RuntimeError("Unexpected product ID format")

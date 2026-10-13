@@ -1,4 +1,7 @@
 # Đường cơ sở API (API Baseline)
+
+> Đây là thiết kế mục tiêu ban đầu. Khi chạy/demo Day 14, dùng [API thực tế](api-runtime.md): prefix `/api`, DTO trực tiếp; một số endpoint, pagination và RBAC bên dưới chưa triển khai. Không dùng các path `/api/v1` trong tài liệu này để gọi bản hiện tại.
+
 ## Các Luồng Giao tiếp Đồng bộ
 
 Dưới đây là đường cơ sở của các REST API hướng ra bên ngoài được cung cấp qua API Gateway, và các kênh gRPC nội bộ được sử dụng cho giao tiếp đồng bộ nghiêm ngặt.

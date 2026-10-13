@@ -1,13 +1,13 @@
 package com.example.paymentservice.controller;
 
-import com.example.paymentservice.dto.PaymentRequest;
 import com.example.paymentservice.dto.PaymentResponse;
 import com.example.paymentservice.service.PaymentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.validation.Valid;
+import com.example.paymentservice.security.JwtUserPrincipal;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.access.prepost.PreAuthorize;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -19,22 +19,18 @@ public class PaymentController {
 
     private final PaymentService paymentService;
 
-    @PostMapping
-    @Operation(summary = "Create a new payment")
-    public ResponseEntity<PaymentResponse> createPayment(@Valid @RequestBody PaymentRequest request) {
-        PaymentResponse response = paymentService.createPayment(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
-    }
-
     @GetMapping("/{orderId}")
+    @PreAuthorize("isAuthenticated()")
     @Operation(summary = "Get payment by Order ID")
-    public ResponseEntity<PaymentResponse> getPaymentByOrderId(@PathVariable String orderId) {
-        return ResponseEntity.ok(paymentService.getPaymentByOrderId(orderId));
+    public ResponseEntity<PaymentResponse> getPaymentByOrderId(@PathVariable("orderId") String orderId,
+                                                             @AuthenticationPrincipal JwtUserPrincipal principal) {
+        return ResponseEntity.ok(paymentService.getPaymentByOrderId(orderId, principal));
     }
 
     @PostMapping("/{id}/refund")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Refund a payment")
-    public ResponseEntity<PaymentResponse> refundPayment(@PathVariable Long id) {
+    public ResponseEntity<PaymentResponse> refundPayment(@PathVariable("id") Long id) {
         return ResponseEntity.ok(paymentService.refundPayment(id));
     }
 }
