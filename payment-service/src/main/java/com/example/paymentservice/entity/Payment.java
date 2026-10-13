@@ -24,6 +24,10 @@ public class Payment {
     @Column(name = "order_id", nullable = false)
     private String orderId;
 
+    // Nullable for historical rows; rows without an owner are visible only to ADMIN.
+    @Column(name = "customer_id")
+    private Long customerId;
+
     @Column(name = "amount", nullable = false)
     private BigDecimal amount;
 
@@ -39,6 +43,25 @@ public class Payment {
 
     @Column(name = "transaction_id", unique = true)
     private String transactionId;
+
+    @Column(name = "provider_order_code", unique = true)
+    private Long providerOrderCode;
+
+    @Column(name = "payment_link_id", unique = true)
+    private String paymentLinkId;
+
+    @Column(name = "checkout_url", length = 1024)
+    private String checkoutUrl;
+
+    @Column(name = "qr_code", length = 4096)
+    private String qrCode;
+
+    private Long expiresAt;
+
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean refundRequired;
+
+    private LocalDateTime providerCheckedAt;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)

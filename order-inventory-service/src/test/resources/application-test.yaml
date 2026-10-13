@@ -1,6 +1,9 @@
 server:
   port: 0
 
+outbox:
+  enabled: false
+
 spring:
   rabbitmq:
     listener:

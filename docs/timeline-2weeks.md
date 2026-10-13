@@ -862,6 +862,9 @@ final stock
 ✅ Performance Report
 ```
 
+Triển khai trong repository: [hướng dẫn Day 13](day13-monitoring-load-test.md).
+Kết quả đo thực tế và các giới hạn: [báo cáo hiệu năng](day13-performance-report.md).
+
 ---
 
 # DAY 14 — Integration + Final Demo
@@ -945,21 +948,12 @@ Notification có thể thất bại nhưng Order vẫn hoạt động.
 README cần có:
 
 ```text
-1. Introduction
-2. Architecture
-3. Technologies
-4. Microservices
-5. Database
-6. API
-7. Event Flow
-8. Saga Pattern
-9. Outbox Pattern
-10. Redis Lock
-11. Docker
-12. Deployment
-13. Monitoring
-14. Load Testing
-15. Demo Scenarios
+1. Tổng quan về Đề tài: Tên đề tài, mô tả và lý do bài toán mang tính thực tế tại các doanh nghiệp.
+2. Phân tích Kiến trúc Microservices: Danh sách các services, sơ đồ Mermaid về luồng dữ liệu và cơ chế giao tiếp (REST, gRPC, Event-Driven Queue).
+3. Hướng dẫn Tìm hiểu & Phân tích Hệ thống: Các bước phân tích Domain Driven Design (DDD), xử lý dữ liệu và thiết kế Database/API Contract.
+4. Hướng dẫn Triển khai lên VPS Thực tế: Các bước chuẩn bị VPS (Ubuntu), Docker/Docker Compose, Nginx Reverse Proxy, SSL Certbot, CI/CD GitHub Actions, và Monitoring (Prometheus/Grafana/Loki).
+5. Tiêu chí Đánh giá & Yêu cầu Bài làm: Các chỉ số đo lường sản phẩm và kịch bản Demo bắt buộc dành cho sinh viên.
+
 ```
 
 ---

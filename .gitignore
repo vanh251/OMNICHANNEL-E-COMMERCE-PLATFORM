@@ -15,3 +15,10 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+# Generated load-test output (may contain operational data)
+infrastructure/k6/results/
+__pycache__/
+infrastructure/day14/results/
+infrastructure/.tools/
+.deploy/

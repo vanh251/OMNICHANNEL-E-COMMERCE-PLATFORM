@@ -1,3 +1,6 @@
+jwt:
+  secret: product-test-secret-at-least-32-bytes-long
+
 server:
   port: 0
 

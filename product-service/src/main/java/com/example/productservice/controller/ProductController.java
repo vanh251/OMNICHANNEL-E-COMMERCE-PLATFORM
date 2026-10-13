@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.util.List;
 
@@ -22,6 +23,8 @@ public class ProductController {
     private final ProductService productService;
 
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
+    @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "BearerAuth")
     @Operation(summary = "Create a new product")
     public ResponseEntity<ProductResponse> createProduct(@Valid @RequestBody ProductRequest request) {
         ProductResponse response = productService.createProduct(request);
@@ -47,6 +50,8 @@ public class ProductController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "BearerAuth")
     @Operation(summary = "Update product by ID")
     public ResponseEntity<ProductResponse> updateProduct(@PathVariable("id") String id,
                                                          @Valid @RequestBody ProductRequest request) {
@@ -54,6 +59,8 @@ public class ProductController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "BearerAuth")
     @Operation(summary = "Delete product by ID")
     public ResponseEntity<Void> deleteProduct(@PathVariable("id") String id) {
         productService.deleteProduct(id);

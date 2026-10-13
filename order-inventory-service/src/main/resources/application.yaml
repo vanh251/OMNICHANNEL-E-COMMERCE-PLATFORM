@@ -16,6 +16,9 @@ spring:
       ddl-auto: update
     show-sql: false
     open-in-view: false
+    properties:
+      hibernate.jdbc.batch_size: 50
+      hibernate.order_updates: true
 
   data:
     redis:
@@ -30,6 +33,17 @@ spring:
     username: ${RABBITMQ_USERNAME:admin}
     password: ${RABBITMQ_PASSWORD:rabbit123}
     virtual-host: ${RABBITMQ_VHOST:/}
+    listener:
+      simple:
+        concurrency: ${RABBITMQ_CONSUMERS:4}
+        max-concurrency: ${RABBITMQ_CONSUMERS:4}
+        prefetch: ${RABBITMQ_PREFETCH:50}
+
+outbox:
+  enabled: ${OUTBOX_ENABLED:true}
+  poll-ms: ${OUTBOX_POLL_MS:50}
+  batch-size: ${OUTBOX_BATCH_SIZE:200}
+  confirm-timeout-ms: ${OUTBOX_CONFIRM_TIMEOUT_MS:5000}
 
 jwt:
   secret: ${JWT_SECRET:vanhdzvcldiojfijsiodjfojsiodjfijnenjbtuututjdnjkfn}
@@ -41,6 +55,12 @@ springdoc:
     path: /swagger-ui.html
 
 management:
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
   endpoints:
     web:
       exposure:

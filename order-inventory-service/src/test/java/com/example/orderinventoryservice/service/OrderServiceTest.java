@@ -120,7 +120,6 @@ class OrderServiceTest {
             CreateOrderRequest request = createValidRequest();
             when(productServiceClient.getProductInfo(anyString(), anyString()))
                     .thenReturn(new ProductServiceClient.ProductInfo("Product IP17-BLK-256", new BigDecimal("100000")));
-            when(orderRepository.existsByOrderCode(anyString())).thenReturn(false);
             when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
                 Order order = invocation.getArgument(0);
                 order.setId(1L);
@@ -135,7 +134,8 @@ class OrderServiceTest {
             // Then
             assertThat(response).isNotNull();
             assertThat(response.getStatus()).isEqualTo("PENDING");
-            assertThat(response.getOrderCode()).startsWith("ORD-");
+            assertThat(response.getOrderCode()).matches("ORD-\\d{8}-[0-9a-f]{32}");
+            verify(orderRepository, never()).existsByOrderCode(anyString());
             assertThat(response.getUserId()).isEqualTo(USER_ID);
             assertThat(response.getTotalAmount()).isEqualByComparingTo(new BigDecimal("200000"));
             assertThat(response.getItems()).hasSize(1);
@@ -153,7 +153,6 @@ class OrderServiceTest {
             CreateOrderRequest request = createValidRequest();
             when(productServiceClient.getProductInfo(anyString(), anyString()))
                     .thenReturn(new ProductServiceClient.ProductInfo("Product IP17-BLK-256", new BigDecimal("100000")));
-            when(orderRepository.existsByOrderCode(anyString())).thenReturn(false);
             when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
                 Order order = invocation.getArgument(0);
                 order.setId(1L);
@@ -269,7 +268,7 @@ class OrderServiceTest {
         void cancelOrder_pendingSuccess() {
             // Given
             Order order = createMockOrder(OrderStatus.PENDING);
-            when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+            when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
             when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
             // When
@@ -280,18 +279,16 @@ class OrderServiceTest {
         }
 
         @Test
-        @DisplayName("11. Cancel CONFIRMED Success")
-        void cancelOrder_confirmedSuccess() {
-            // Given
+        @DisplayName("11. Cancel CONFIRMED is rejected without changing stock or publishing")
+        void cancelOrder_confirmedRejected() {
             Order order = createMockOrder(OrderStatus.CONFIRMED);
-            when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
-            when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
+            when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
 
-            // When
-            OrderResponse response = orderService.cancelOrder(1L, USER_ID, USER_EMAIL);
-
-            // Then
-            assertThat(response.getStatus()).isEqualTo("CANCELLED");
+            assertThatThrownBy(() -> orderService.cancelOrder(1L, USER_ID, USER_EMAIL))
+                    .isInstanceOf(InvalidOrderStatusException.class);
+            assertThat(order.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
+            verify(orderRepository, never()).save(any());
+            verifyNoInteractions(inventoryService, eventPublisher);
         }
 
         @Test
@@ -299,7 +296,7 @@ class OrderServiceTest {
         void cancelOrder_shippingFail() {
             // Given
             Order order = createMockOrder(OrderStatus.SHIPPING);
-            when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+            when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
 
             // When/Then
             assertThatThrownBy(() -> orderService.cancelOrder(1L, USER_ID, USER_EMAIL))
@@ -312,7 +309,7 @@ class OrderServiceTest {
         void cancelOrder_completedFail() {
             // Given
             Order order = createMockOrder(OrderStatus.COMPLETED);
-            when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+            when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
 
             // When/Then
             assertThatThrownBy(() -> orderService.cancelOrder(1L, USER_ID, USER_EMAIL))
@@ -325,7 +322,7 @@ class OrderServiceTest {
         void cancelOrder_cancelledFail() {
             // Given
             Order order = createMockOrder(OrderStatus.CANCELLED);
-            when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+            when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
 
             // When/Then
             assertThatThrownBy(() -> orderService.cancelOrder(1L, USER_ID, USER_EMAIL))
@@ -338,7 +335,7 @@ class OrderServiceTest {
         void cancelOrder_otherUserFail() {
             // Given
             Order order = createMockOrder(OrderStatus.PENDING);
-            when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+            when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
 
             // When/Then
             assertThatThrownBy(() -> orderService.cancelOrder(1L, OTHER_USER_ID, "other@example.com"))
@@ -351,7 +348,7 @@ class OrderServiceTest {
         void cancelOrder_createsHistory() {
             // Given
             Order order = createMockOrder(OrderStatus.PENDING);
-            when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+            when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
             when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
             // When

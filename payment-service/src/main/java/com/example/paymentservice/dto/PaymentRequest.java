@@ -9,6 +9,10 @@ import java.math.BigDecimal;
 
 @Data
 public class PaymentRequest {
+    @NotNull
+    @jakarta.validation.constraints.Positive
+    private Long customerId;
+
     @NotBlank(message = "Order ID is required")
     private String orderId;
 

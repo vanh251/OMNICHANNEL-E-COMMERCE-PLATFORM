@@ -21,10 +21,15 @@ public class OrderCreatedConsumer {
     @RabbitListener(queues = "payment.queue")
     public void receive(Message message) throws IOException {
         JsonNode event = objectMapper.readTree(message.getBody());
+        if ("OrderCancelledEvent".equals(event.path("eventType").asText())) {
+            paymentService.cancelPayment(event.path("data").path("orderId").asText());
+            return;
+        }
         if (!"OrderCreatedEvent".equals(event.path("eventType").asText()))
             throw new IllegalArgumentException("Unknown order event");
         JsonNode data = event.path("data");
         PaymentRequest request = new PaymentRequest();
+        request.setCustomerId(Long.valueOf(data.path("customerId").asText()));
         request.setOrderId(data.path("orderId").asText());
         request.setAmount(new BigDecimal(data.path("totalAmount").asText()));
         request.setCurrency(data.path("currency").asText());

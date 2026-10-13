@@ -1,4 +1,6 @@
 # Danh mục Sự kiện (Event Catalog)
+> Runtime hiện dùng ID số dạng chuỗi cho orderId/customerId (ví dụ "123", "42"); các ID có tiền tố trong ví dụ dưới đây thuộc thiết kế ban đầu. Payment hỗ trợ mock và payOS; xem [luồng payOS](payos-integration.md).
+
 ## Các Luồng Bất đồng bộ & Cấu trúc Sự kiện
 
 Hệ thống dựa trên Kiến trúc Hướng Sự kiện (Event-Driven Architecture) sử dụng các mẫu Saga và Outbox để xử lý các giao dịch phân tán. Dưới đây là danh mục các sự kiện nghiệp vụ (domain events) cốt lõi di chuyển qua Message Broker.
@@ -89,6 +91,7 @@ Hệ thống dựa trên Kiến trúc Hướng Sự kiện (Event-Driven Archite
 ### 4. `OrderCancelledEvent` (Sự kiện Hủy Đơn hàng)
 - **Bên phát (Publisher):** Order & Inventory Service
 - **Bên đăng ký (Subscribers):**
+  - Payment Service (lưu dấu hủy; ngăn thanh toán đến muộn hoặc hoàn tiền payment đã SUCCESS)
   - Notification Service (để gửi thông báo "Đơn hàng của bạn đã bị hủy")
 - **Mô tả:** Được kích hoạt trong hai trường hợp: (1) Compensating Transaction tự động hủy đơn hàng khi thanh toán thất bại (Saga Flow), hoặc (2) khách hàng chủ động hủy đơn khi đơn hàng đang ở trạng thái `PENDING`. Sự kiện này đảm bảo kho hàng đã giữ (reserved stock) được giải phóng và khách hàng được thông báo kịp thời.
 
@@ -103,6 +106,26 @@ Hệ thống dựa trên Kiến trúc Hướng Sự kiện (Event-Driven Archite
     "customerId": "usr_999",
     "reason": "PAYMENT_FAILED",
     "cancelledAt": "2026-10-05T14:36:58Z"
+  }
+}
+```
+
+### 5. `PaymentRefundedEvent` (Sự kiện Hoàn tiền)
+
+Payment ghi trạng thái REFUNDED và Outbox trong cùng transaction, routing key
+`payment.refunded`; Notification nhận qua notification.queue. Việc hoàn tiền
+chỉ xảy ra một lần khi đơn đã hủy nhưng payment trước đó SUCCESS.
+
+```json
+{
+  "eventId": "uuid",
+  "eventType": "PaymentRefundedEvent",
+  "timestamp": "2026-10-13T04:00:00Z",
+  "data": {
+    "orderId": "123",
+    "transactionId": "TXN-uuid",
+    "amountRefunded": 1000,
+    "refundedAt": "2026-10-13T04:00:00Z"
   }
 }
 ```
