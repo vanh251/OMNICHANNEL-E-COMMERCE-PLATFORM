@@ -1,0 +1,716 @@
+{
+  "info": {
+    "_postman_id": "8e3b5671-a4ef-4e31-897b-b8f886f37ad0",
+    "name": "Omnichannel E-Commerce API (DuckDNS Production)",
+    "description": "Collection Postman goi toan bo API cua Omnichannel E-Commerce Platform tro toi domain https://api-vanhdz.duckdns.org\nBao gom: Auth, Profile, Admin, Categories, Products, Orders, Payments (Mock & PayOS) va Actuator Health.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://api-vanhdz.duckdns.org",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "adminToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "orderId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "paymentId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "productId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "categoryId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "01. Authentication & Users",
+      "item": [
+        {
+          "name": "Register User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Nguyen\",\n  \"lastName\": \"Van A\",\n  \"email\": \"customer@example.test\",\n  \"password\": \"Password123!\",\n  \"phone\": \"0987654321\",\n  \"address\": \"123 Cau Giay, Hanoi\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Dang ky tai khoan khach hang moi (mac dinh role USER)"
+          }
+        },
+        {
+          "name": "Login User (Customer)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var data = pm.response.json();",
+                  "    if (data.accessToken) {",
+                  "        pm.collectionVariables.set('accessToken', data.accessToken);",
+                  "        console.log('Set accessToken:', data.accessToken);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"customer@example.test\",\n  \"password\": \"Password123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Dang nhap tai khoan khach hang va tu dong luu accessToken vao collection variable."
+          }
+        },
+        {
+          "name": "Login Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var data = pm.response.json();",
+                  "    if (data.accessToken) {",
+                  "        pm.collectionVariables.set('adminToken', data.accessToken);",
+                  "        console.log('Set adminToken:', data.accessToken);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"usera@example.test\",\n  \"password\": \"Password123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Dang nhap tai khoan ADMIN (vi du usera@example.test da duoc cap role ADMIN) va tu dong luu adminToken."
+          }
+        },
+        {
+          "name": "Get Profile (Me)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "me"
+              ]
+            },
+            "description": "Lay thong tin profile nguoi dung hien tai tu token JWT."
+          }
+        },
+        {
+          "name": "Test Admin Access",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/test",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "test"
+              ]
+            },
+            "description": "Endpoint kiem tra quyen ADMIN (yeu cau ROLE_ADMIN)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "02. Categories & Products",
+      "item": [
+        {
+          "name": "Get All Categories",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "categories"
+              ]
+            },
+            "description": "Doc danh muc cong khai (Khong can Auth)."
+          }
+        },
+        {
+          "name": "Create Category [ADMIN]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var data = pm.response.json();",
+                  "    if (data.id) {",
+                  "        pm.collectionVariables.set('categoryId', data.id);",
+                  "        console.log('Set categoryId:', data.id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Dien thoai & Phu kien\",\n  \"description\": \"Danh muc dien thoai di dong thong minh\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "categories"
+              ]
+            },
+            "description": "Tao danh muc moi (Yeu cau ADMIN)."
+          }
+        },
+        {
+          "name": "Get Category by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/categories/{{categoryId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "categories",
+                "{{categoryId}}"
+              ]
+            },
+            "description": "Xem chi tiet mot danh muc."
+          }
+        },
+        {
+          "name": "Get All Products",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/products",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "products"
+              ]
+            },
+            "description": "Xem danh sach toan bo san pham cong khai (Khong can Auth)."
+          }
+        },
+        {
+          "name": "Create Product [ADMIN]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var data = pm.response.json();",
+                  "    if (data.id) {",
+                  "        pm.collectionVariables.set('productId', data.id);",
+                  "        console.log('Set productId:', data.id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"San pham Demo VietQR\",\n  \"description\": \"San pham test thanh toan PayOS\",\n  \"brand\": \"DemoBrand\",\n  \"categoryId\": \"{{categoryId}}\",\n  \"variants\": [\n    {\n      \"sku\": \"DEMO-PAYOS-2K\",\n      \"name\": \"Ban Thu Nghiem\",\n      \"price\": 2000,\n      \"stock\": 100\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/products",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "products"
+              ]
+            },
+            "description": "Tao san pham moi voi SKU va gia 2000 VND (Yeu cau ADMIN)."
+          }
+        },
+        {
+          "name": "Get Product by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/products/{{productId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "products",
+                "{{productId}}"
+              ]
+            },
+            "description": "Xem thong tin chi tiet cua 1 san pham."
+          }
+        },
+        {
+          "name": "Get Products by Category ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/products/category/{{categoryId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "products",
+                "category",
+                "{{categoryId}}"
+              ]
+            },
+            "description": "Lay danh sach san pham theo Category."
+          }
+        }
+      ]
+    },
+    {
+      "name": "03. Orders & Inventory",
+      "item": [
+        {
+          "name": "Create Order (Dat hang)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var data = pm.response.json();",
+                  "    if (data.id) {",
+                  "        pm.collectionVariables.set('orderId', data.id);",
+                  "        console.log('Set orderId:', data.id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"shippingAddress\": \"123 Pho Hue, Hai Ba Trung, Hanoi\",\n  \"note\": \"Giao trong gio hanh chinh\",\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"sku\": \"DEMO-PAYOS-2K\",\n      \"quantity\": 1\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders"
+              ]
+            },
+            "description": "Dat hang (Khoi tao Saga: kiem tra ton kho, tao don PENDING va phat OrderCreatedEvent)."
+          }
+        },
+        {
+          "name": "Get Order by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/{{orderId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders",
+                "{{orderId}}"
+              ]
+            },
+            "description": "Tra cuu chi tiet don hang (Yeu cau chu don hoac ADMIN)."
+          }
+        },
+        {
+          "name": "Get My Orders",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/my-orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders",
+                "my-orders"
+              ]
+            },
+            "description": "Lay danh sach tat ca cac don hang cua nguoi dung hien tai."
+          }
+        },
+        {
+          "name": "Cancel Order (Chu don huy PENDING)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/{{orderId}}/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders",
+                "{{orderId}}",
+                "cancel"
+              ]
+            },
+            "description": "Huy don hang (Chi cho phep khi don o trang thai PENDING; neu CONFIRMED tra ve 409 Conflict)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "04. Payments & PayOS",
+      "item": [
+        {
+          "name": "Get Payment Details & VietQR Link",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var data = pm.response.json();",
+                  "    if (data.id) {",
+                  "        pm.collectionVariables.set('paymentId', data.id);",
+                  "    }",
+                  "    if (data.checkoutUrl) {",
+                  "        console.log('PayOS Checkout URL:', data.checkoutUrl);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/payments/{{orderId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "{{orderId}}"
+              ]
+            },
+            "description": "Lay thong tin thanh toan cua don hang. Neu bat mode payos, tra ve checkoutUrl va qrCode de khach quet thanh toan."
+          }
+        },
+        {
+          "name": "Refund Payment [ADMIN]",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/payments/{{paymentId}}/refund",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "{{paymentId}}",
+                "refund"
+              ]
+            },
+            "description": "Hoan tien cho giao dich thanh toan (Yeu cau ADMIN va don hang da co dau huy)."
+          }
+        },
+        {
+          "name": "PayOS Webhook (Mock Callback)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"00\",\n  \"desc\": \"success\",\n  \"data\": {\n    \"orderCode\": 123456,\n    \"amount\": 2000,\n    \"description\": \"Thanh toan don hang\",\n    \"accountNumber\": \"123456789\",\n    \"reference\": \"FT123456\",\n    \"transactionDateTime\": \"2026-10-13 17:00:00\",\n    \"currency\": \"VND\",\n    \"paymentLinkId\": \"link123\",\n    \"code\": \"00\",\n    \"desc\": \"success\"\n  },\n  \"signature\": \"sample_signature_hash\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/payments/webhooks/payos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "webhooks",
+                "payos"
+              ]
+            },
+            "description": "Endpoint nhan thong bao thanh toan thanh cong tu PayOS (Yeu cau chu ky so hop le)."
+          }
+        },
+        {
+          "name": "PayOS Return URL (Page Callback)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/payments/payos/return?orderCode=123456&status=PAID",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "payos",
+                "return"
+              ],
+              "query": [
+                {
+                  "key": "orderCode",
+                  "value": "123456"
+                },
+                {
+                  "key": "status",
+                  "value": "PAID"
+                }
+              ]
+            },
+            "description": "Trang dieu huong khach hang sau khi thanh toan PayOS thanh cong."
+          }
+        },
+        {
+          "name": "PayOS Cancel URL (Cancel Callback)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/payments/payos/cancel?orderCode=123456&status=CANCELLED",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "payos",
+                "cancel"
+              ],
+              "query": [
+                {
+                  "key": "orderCode",
+                  "value": "123456"
+                },
+                {
+                  "key": "status",
+                  "value": "CANCELLED"
+                }
+              ]
+            },
+            "description": "Trang dieu huong khi khach hang bam huy thanh toan tren cong PayOS."
+          }
+        }
+      ]
+    },
+    {
+      "name": "05. Monitoring & Health",
+      "item": [
+        {
+          "name": "Actuator Health Check",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/actuator/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "health"
+              ]
+            },
+            "description": "Kiem tra suc khoe tong quan cua he thong va API Gateway qua Spring Boot Actuator."
+          }
+        }
+      ]
+    }
+  ]
+}

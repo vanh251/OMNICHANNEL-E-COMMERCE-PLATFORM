@@ -108,8 +108,8 @@ sang HTTPS để đo qua Nginx. Dùng `--env-file` nếu Compose không dùng `.
 Runner tạo tài khoản, category và product qua các API hiện có. Mỗi lượt có SKU
 mới và lượng stock `rate * duration + 100`, với một item có quantity 1 mỗi đơn.
 Giá fixture là 1000 VND để mock payment hiện tại đi nhánh success (`<= 10000`).
-Hiện chưa có API ghi/đọc inventory, nên runner đóng vai trò công cụ vận hành:
-INSERT fixture và đọc snapshot ở **Order DB** bằng `psql` trong container postgres.
+Runner chờ Product nhận xác nhận đồng bộ inventory qua RabbitMQ, rồi đọc snapshot
+ở **Order DB** bằng `psql` trong container postgres. Không cần INSERT fixture.
 Service không truy cập database của service khác. Runner không reset stock,
 không xóa dữ liệu cũ; fixture được giữ để kiểm tra sau test.
 Product API yêu cầu ADMIN cho thao tác ghi. Thiết lập FIXTURE_ADMIN_EMAIL và

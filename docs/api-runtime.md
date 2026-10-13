@@ -37,7 +37,9 @@ Ví dụ request tạo order, dùng ID/SKU sản phẩm đã có inventory trong
 
 Header `Authorization: Bearer <accessToken>`. Giá lấy từ Product qua gRPC, không nhận giá từ client. Không đủ tồn trả 400 với `message: "Insufficient stock for SKU: <sku>"`; request sai validation cũng có thể trả 400, vì thế test phải kiểm tra nội dung lỗi. Order không tồn tại trả 404, đọc đơn của user khác trả 403, thiếu JWT trả 401.
 
-Runner Day 14 tạo product bằng `{name, categoryId, variants:[{sku,name,price,stock}]}` rồi insert **fixture quản trị** vào database của Order vì chưa có inventory write API. Đây không phải cơ chế đồng bộ dữ liệu liên service của ứng dụng.
+Khi tạo product, `active=false` cho đến khi Order/Inventory tạo inventory theo SKU và xác nhận qua RabbitMQ. Trường `stock` khi tạo variant là tồn ban đầu; thay đổi tồn của SKU đã có qua PUT product sẽ bị từ chối. Runner Day 13/14 chờ đồng bộ hoàn tất rồi mới đặt đơn, không insert inventory trực tiếp. Category chỉ lưu ở Product vì Order/Inventory không có bảng category.
+
+Product lưu sự kiện đồng bộ ngay trong document MongoDB, publisher gửi lại khi RabbitMQ gián đoạn. Consumer của Order/Inventory chỉ insert SKU chưa có, không ghi đè tồn của SKU đã giao dịch; xác nhận được ghi vào outbox PostgreSQL. Queue lỗi cần đối soát: `catalog.inventory.sync.dlq` và `catalog.inventory.synced.dlq`. Với product đã tồn tại trước thay đổi này, bật `CATALOG_INVENTORY_BACKFILL_ENABLED=true` khi triển khai để xếp chúng vào luồng đồng bộ; các product đó tạm `active=false` đến khi nhận xác nhận. Index `unique_variant_sku` chỉ áp dụng cho product mới (`skuIndexEligible=true`) để dữ liệu cũ có SKU trùng không chặn khởi động; vẫn cần đối soát SKU trùng cũ trước khi mở rộng ràng buộc cho toàn bộ catalog.
 
 Luồng chính tự tạo payment qua `OrderCreatedEvent`; không gọi thêm POST payment để hoàn tất Saga. Chế độ mock: amount ≤ 10000 thành công, > 10000 thất bại. Chế độ payos: Payment giữ PENDING, trả checkoutUrl/qrCode/expiresAt và chờ tiền được xác minh. GET payment dùng ID số của order chuyển thành string, không dùng providerOrderCode. Notification chỉ ghi log, chưa có REST API dù Gateway đã có route `/api/notifications/**`.
 
