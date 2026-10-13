@@ -11,11 +11,15 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
 jobs:
   deploy:
     name: Deploy to VPS
     if: >
-      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'workflow_run' &&
        github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.head_branch == 'main')
@@ -25,56 +29,50 @@ jobs:
     steps:
       - name: Deploy to VPS
         uses: appleboy/ssh-action@v1.2.2
+        env:
+          DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          PAYOS_CLIENT_ID: ${{ secrets.PAYOS_CLIENT_ID }}
+          PAYOS_API_KEY: ${{ secrets.PAYOS_API_KEY }}
+          PAYOS_CHECKSUM_KEY: ${{ secrets.PAYOS_CHECKSUM_KEY }}
+          PAYOS_RETURN_URL: https://api-vanhdz.duckdns.org/api/payments/payos/return
+          PAYOS_CANCEL_URL: https://api-vanhdz.duckdns.org/api/payments/payos/cancel
+          PAYOS_WEBHOOK_URL: https://api-vanhdz.duckdns.org/api/payments/webhooks/payos
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT }}
           command_timeout: 60m
+          envs: DEPLOY_SHA,PAYOS_CLIENT_ID,PAYOS_API_KEY,PAYOS_CHECKSUM_KEY,PAYOS_RETURN_URL,PAYOS_CANCEL_URL,PAYOS_WEBHOOK_URL
           script: |
             set -e
 
             cd /opt/omnichannel-ecommerce
 
-            echo "=== Setup swap space if not exists ==="
-            if [ $(swapon --show | wc -l) -eq 0 ]; then
-              sudo fallocate -l 4G /swapfile || true
-              sudo chmod 600 /swapfile || true
-              sudo mkswap /swapfile || true
-              sudo swapon /swapfile || true
-              echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab || true
-              echo "Swap space created."
-            else
-              echo "Swap space already exists."
-            fi
-
             echo "=== Disk usage before deploy ==="
             df -h /
 
-            echo "=== Free up disk: remove dangling images & stopped containers ==="
-            docker container prune -f
-            docker image prune -f
-
-            echo "=== Disk usage after cleanup ==="
-            df -h /
-
             echo "=== Sync latest repo configurations ==="
-            git pull origin main
+            git fetch origin main
+            git checkout --detach "$DEPLOY_SHA"
+
+            export IMAGE_TAG="sha-$(printf %.7s "$DEPLOY_SHA")"
+            python3 infrastructure/payos/configure-vps.py
+
+            docker compose -f docker-compose.production.yml config --quiet
 
             echo "=== Pull latest images ==="
             docker compose -f docker-compose.production.yml pull
 
             echo "=== Restart services ==="
-            docker compose -f docker-compose.production.yml up -d --remove-orphans
+            docker compose -f docker-compose.production.yml up -d --wait --wait-timeout 300
 
-            echo "=== Wait for services to be healthy (max 3 minutes) ==="
-            timeout 180 bash -c \
-              'until docker compose -f docker-compose.production.yml ps | grep -E "running|healthy"; do
-                echo "Waiting for services..."; sleep 5;
-              done' || echo "Warning: some services may not be healthy yet"
+            echo "=== Verify public payOS endpoint ==="
+            curl --fail --silent --show-error --max-time 30 "$PAYOS_RETURN_URL" |
+              python3 -c 'import json, sys; sys.exit(0 if json.load(sys.stdin).get("paymentStatus") == "VERIFY_IN_APP" else "Public payOS endpoint is not ready")'
 
-            echo "=== Remove unused images after deploy ==="
-            docker image prune -f
+            echo "=== Register payOS webhook ==="
+            python3 infrastructure/payos/verify-channel.py --confirm-webhook
 
             echo "=== Disk usage after deploy ==="
             df -h /

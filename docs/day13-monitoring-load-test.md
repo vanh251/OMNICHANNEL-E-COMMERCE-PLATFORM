@@ -112,8 +112,9 @@ Hiện chưa có API ghi/đọc inventory, nên runner đóng vai trò công c�
 INSERT fixture và đọc snapshot ở **Order DB** bằng `psql` trong container postgres.
 Service không truy cập database của service khác. Runner không reset stock,
 không xóa dữ liệu cũ; fixture được giữ để kiểm tra sau test.
-Nếu Product API đã được bảo vệ ADMIN trong một bản triển khai khác, cần chuẩn bị
-fixture với quyền phù hợp trước khi dùng runner này.
+Product API yêu cầu ADMIN cho thao tác ghi. Thiết lập FIXTURE_ADMIN_EMAIL và
+FIXTURE_ADMIN_PASSWORD theo [hướng dẫn fixture](security-and-cancellation.md);
+runner dùng ADMIN tạo catalog và tài khoản khách riêng để đo luồng đặt đơn.
 
 ## Đánh giá và báo cáo
 

@@ -22,6 +22,7 @@ public class NotificationConsumer {
             case "OrderCreatedEvent" -> "Your order #" + orderId + " has been created.";
             case "PaymentSucceededEvent" -> "Payment succeeded for order #" + orderId + ".";
             case "PaymentFailedEvent" -> "Payment failed for order #" + orderId + ".";
+            case "PaymentRefundedEvent" -> "Payment refunded for order #" + orderId + ".";
             case "OrderCancelledEvent" -> "Your order #" + orderId + " has been cancelled.";
             default -> throw new IllegalArgumentException("Unknown notification event");
         };

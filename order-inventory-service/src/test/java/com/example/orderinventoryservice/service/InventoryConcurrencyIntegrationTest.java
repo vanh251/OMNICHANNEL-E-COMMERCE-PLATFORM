@@ -297,6 +297,47 @@ public class InventoryConcurrencyIntegrationTest {
         }
     }
 
+    @Test
+    void racingCustomerCancellationAndPaymentKeepStockConsistent() throws Exception {
+        when(productServiceClient.getProductInfo(anyString(), anyString()))
+                .thenReturn(new ProductServiceClient.ProductInfo("Product", BigDecimal.ONE));
+        Long orderId = orderService.createOrder(CreateOrderRequest.builder().items(List.of(
+                OrderItemRequest.builder().productId("product").sku(FLASH_SKU).quantity(1).build()))
+                .shippingAddress("Test").build(), 1L, "test@example.test").getId();
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            Future<?> payment = executor.submit(() -> {
+                awaitStart(start);
+                orderService.confirmPayment(orderId);
+            });
+            Future<Boolean> cancel = executor.submit(() -> {
+                awaitStart(start);
+                try {
+                    orderService.cancelOrder(orderId, 1L, "test@example.test");
+                    return true;
+                } catch (com.example.orderinventoryservice.exception.InvalidOrderStatusException ex) {
+                    return false;
+                }
+            });
+            start.countDown();
+            payment.get(30, TimeUnit.SECONDS);
+            boolean cancelled = cancel.get(30, TimeUnit.SECONDS);
+            var order = orderService.getOrderById(orderId, 1L);
+            assertThat(order.getStatus()).isEqualTo(cancelled ? "CANCELLED" : "CONFIRMED");
+            assertThat(order.getStatusHistories()).hasSize(2);
+            Inventory stock = inventoryRepository.findBySku(FLASH_SKU).orElseThrow();
+            assertThat(stock.getReservedStock()).isZero();
+            assertThat(stock.getTotalStock()).isEqualTo(cancelled ? 1 : 0);
+            assertThat(stock.getAvailableStock()).isEqualTo(cancelled ? 1 : 0);
+            assertThat(outboxRepository.findAll().stream()
+                    .filter(event -> event.getRoutingKey().equals("order.cancelled")).count())
+                    .isEqualTo(cancelled ? 1 : 0);
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
     private static void awaitStart(CountDownLatch start) {
         try {
             start.await();

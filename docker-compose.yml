@@ -151,6 +151,7 @@ services:
     logging: *service-logging
     restart: unless-stopped
     environment:
+      JWT_SECRET: ${JWT_SECRET}
       PRODUCT_SERVICE_PORT: ${PRODUCT_SERVICE_PORT:-8082}
       MONGO_HOST: ${MONGO_HOST:-mongodb}
       MONGO_PORT: ${MONGO_PORT:-27017}
@@ -233,6 +234,16 @@ services:
     logging: *service-logging
     restart: unless-stopped
     environment:
+      PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-mock}
+      PAYOS_CLIENT_ID: ${PAYOS_CLIENT_ID:-}
+      PAYOS_API_KEY: ${PAYOS_API_KEY:-}
+      PAYOS_CHECKSUM_KEY: ${PAYOS_CHECKSUM_KEY:-}
+      PAYOS_RETURN_URL: ${PAYOS_RETURN_URL:-http://localhost:8080/api/payments/payos/return}
+      PAYOS_CANCEL_URL: ${PAYOS_CANCEL_URL:-http://localhost:8080/api/payments/payos/cancel}
+      PAYOS_TIMEOUT_MS: ${PAYOS_TIMEOUT_MS:-10000}
+      PAYOS_LINK_TTL_SECONDS: ${PAYOS_LINK_TTL_SECONDS:-900}
+      PAYOS_POLL_MS: ${PAYOS_POLL_MS:-15000}
+      JWT_SECRET: ${JWT_SECRET}
       PAYMENT_SERVICE_PORT: ${PAYMENT_SERVICE_PORT:-8084}
       POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
