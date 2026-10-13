@@ -21,9 +21,11 @@ class AcceptanceChecksTest(unittest.TestCase):
         runner.run_id = "day14-test"
         runner.database = "order_db"
         runner.admin_token = "admin-access-token"
+        runner.snapshot = Mock(return_value={"availableStock": 1})
         with patch.object(demo, "api", side_effect=[
-                {"id": "category"}, {"id": "product"},
-                {"variants": [{"sku": "DAY14-TEST-E2E"}]}]) as api, patch.object(demo.load_test, "sql"):
+                {"id": "category"}, {"id": "product"}]) as api, \
+                patch.object(demo, "eventually", return_value={
+                    "active": True, "variants": [{"sku": "DAY14-TEST-E2E"}]}):
             runner.fixture("e2e")
         self.assertEqual("admin-access-token", api.call_args_list[0].args[4])
         self.assertEqual("admin-access-token", api.call_args_list[1].args[4])

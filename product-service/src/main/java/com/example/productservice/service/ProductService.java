@@ -12,9 +12,18 @@ import com.example.productservice.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.FindAndModifyOptions;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.UUID;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -24,11 +33,13 @@ public class ProductService {
 
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
+    private final MongoTemplate mongoTemplate;
 
     public ProductResponse createProduct(ProductRequest request) {
         Category category = categoryRepository.findById(request.getCategoryId())
                 .orElseThrow(() -> new ResourceNotFoundException("Category not found with id: " + request.getCategoryId()));
 
+        validateSkus(request.getVariants(), null);
         LocalDateTime now = LocalDateTime.now();
         List<ProductVariant> variants = request.getVariants().stream()
                 .map(this::mapToVariantEntity)
@@ -41,7 +52,10 @@ public class ProductService {
                 .categoryId(category.getId())
                 .categoryName(category.getName())
                 .variants(variants)
-                .active(true)
+                .active(false)
+                .skuIndexEligible(true)
+                .inventorySyncEventId(UUID.randomUUID().toString())
+                .inventorySyncPublished(false)
                 .createdAt(now)
                 .updatedAt(now)
                 .build();
@@ -76,19 +90,45 @@ public class ProductService {
         Category category = categoryRepository.findById(request.getCategoryId())
                 .orElseThrow(() -> new ResourceNotFoundException("Category not found with id: " + request.getCategoryId()));
 
+        validateSkus(request.getVariants(), id);
+        Set<String> existingSkus = product.getVariants().stream()
+                .map(ProductVariant::getSku).collect(Collectors.toSet());
+        for (ProductVariantDTO variant : request.getVariants()) {
+            product.getVariants().stream()
+                    .filter(existing -> existing.getSku().equals(variant.getSku().trim()))
+                    .findFirst()
+                    .ifPresent(existing -> {
+                        if (!Objects.equals(existing.getStock(), variant.getStock())) {
+                            throw new IllegalArgumentException(
+                                    "Existing SKU stock is managed by inventory service: " + existing.getSku());
+                        }
+                    });
+        }
+        boolean addedSku = request.getVariants().stream()
+                .anyMatch(variant -> !existingSkus.contains(variant.getSku()));
+
         List<ProductVariant> variants = request.getVariants().stream()
                 .map(this::mapToVariantEntity)
                 .collect(Collectors.toList());
 
-        product.setName(request.getName().trim());
-        product.setDescription(request.getDescription());
-        product.setBrand(request.getBrand());
-        product.setCategoryId(category.getId());
-        product.setCategoryName(category.getName());
-        product.setVariants(variants);
-        product.setUpdatedAt(LocalDateTime.now());
-
-        Product updated = productRepository.save(product);
+        Update changes = new Update()
+                .set("name", request.getName().trim())
+                .set("description", request.getDescription())
+                .set("brand", request.getBrand())
+                .set("categoryId", category.getId())
+                .set("categoryName", category.getName())
+                .set("variants", variants)
+                .set("updatedAt", LocalDateTime.now());
+        if (addedSku) {
+            changes.set("active", false)
+                    .set("inventorySyncEventId", UUID.randomUUID().toString())
+                    .set("inventorySyncPublished", false);
+        }
+        Product updated = mongoTemplate.findAndModify(Query.query(Criteria.where("id").is(id)),
+                changes, FindAndModifyOptions.options().returnNew(true), Product.class);
+        if (updated == null) {
+            throw new ResourceNotFoundException("Product not found with id: " + id);
+        }
         log.info("Updated product with id: {}", updated.getId());
         return mapToResponse(updated);
     }
@@ -103,13 +143,28 @@ public class ProductService {
 
     private ProductVariant mapToVariantEntity(ProductVariantDTO dto) {
         return ProductVariant.builder()
-                .sku(dto.getSku())
+                .sku(dto.getSku().trim())
                 .name(dto.getName())
                 .price(dto.getPrice())
                 .oldPrice(dto.getOldPrice())
                 .stock(dto.getStock())
                 .imageUrl(dto.getImageUrl())
                 .build();
+    }
+
+    private void validateSkus(List<ProductVariantDTO> variants, String currentProductId) {
+        Set<String> skus = new HashSet<>();
+        for (ProductVariantDTO variant : variants) {
+            String sku = variant.getSku().trim();
+            if (!skus.add(sku)) {
+                throw new IllegalArgumentException("Duplicate SKU in product: " + sku);
+            }
+            productRepository.findByVariantSku(sku).ifPresent(owner -> {
+                if (!owner.getId().equals(currentProductId)) {
+                    throw new IllegalArgumentException("SKU already belongs to another product: " + sku);
+                }
+            });
+        }
     }
 
     private ProductVariantDTO mapToVariantDTO(ProductVariant entity) {

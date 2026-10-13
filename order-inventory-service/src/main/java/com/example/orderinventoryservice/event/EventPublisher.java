@@ -24,6 +24,10 @@ public class EventPublisher {
         save("order.cancelled", event);
     }
 
+    public void publishInventorySyncedEvent(Object event) {
+        save("catalog.inventory.synced", event);
+    }
+
     private void save(String routingKey, Object event) {
         try {
             outboxEventRepository.save(new OutboxEvent(routingKey, objectMapper.writeValueAsString(event)));

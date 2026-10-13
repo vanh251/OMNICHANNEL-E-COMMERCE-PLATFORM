@@ -3,14 +3,16 @@ package com.example.productservice.service;
 import com.example.productservice.dto.CategoryRequest;
 import com.example.productservice.dto.CategoryResponse;
 import com.example.productservice.entity.Category;
-import com.example.productservice.entity.Product;
 import com.example.productservice.exception.DuplicateResourceException;
 import com.example.productservice.exception.ResourceNotFoundException;
 import com.example.productservice.repository.CategoryRepository;
-import com.example.productservice.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -22,7 +24,7 @@ import java.util.stream.Collectors;
 public class CategoryService {
 
     private final CategoryRepository categoryRepository;
-    private final ProductRepository productRepository;
+    private final MongoTemplate mongoTemplate;
 
     public CategoryResponse createCategory(CategoryRequest request) {
         String trimmedName = request.getName().trim();
@@ -74,15 +76,10 @@ public class CategoryService {
 
         // Sync categoryName in products if name changed
         if (!oldName.equals(trimmedName)) {
-            List<Product> products = productRepository.findByCategoryId(id);
-            for (Product product : products) {
-                product.setCategoryName(trimmedName);
-                product.setUpdatedAt(LocalDateTime.now());
-            }
-            if (!products.isEmpty()) {
-                productRepository.saveAll(products);
-                log.info("Updated category name in {} products", products.size());
-            }
+            long count = mongoTemplate.updateMulti(Query.query(Criteria.where("categoryId").is(id)),
+                    new Update().set("categoryName", trimmedName).set("updatedAt", LocalDateTime.now()),
+                    com.example.productservice.entity.Product.class).getModifiedCount();
+            log.info("Updated category name in {} products", count);
         }
 
         return mapToResponse(updated);

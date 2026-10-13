@@ -9,7 +9,7 @@ docker compose up -d --build --wait --wait-timeout 300
 python infrastructure/day14/run-demo.py
 ```
 
-Runner gọi Gateway, tạo user/category/product/SKU riêng có tiền tố `day14-<uuid>`, insert inventory fixture vào DB Order, giữ dữ liệu để đối chiếu. Không reset tồn hiện hữu, không xóa volume, không ghi token/password vào báo cáo. Yêu cầu user chạy script có quyền Docker. Môi trường phải dành riêng cho demo vì có 500 worker và bước tạm dừng Notification.
+Runner gọi Gateway, tạo user/category/product/SKU riêng có tiền tố `day14-<uuid>`, chờ đồng bộ inventory qua RabbitMQ, giữ dữ liệu để đối chiếu. Không reset tồn hiện hữu, không xóa volume, không ghi token/password vào báo cáo. Yêu cầu user chạy script có quyền Docker. Môi trường phải dành riêng cho demo vì có 500 worker và bước tạm dừng Notification.
 
 Tham số: `--env-file`, `--compose-file`, `--base-url` (chỉ loopback trên cùng Docker host), `--timeout` (thời gian chờ từng trạng thái, mặc định 120 giây). Nếu kiểm tra thất bại, process trả exit code 1 và ghi kết quả từng kịch bản đã hoàn thành. File JSON nằm trong `infrastructure/day14/results/` và được gitignore. Nếu preflight Docker/config thất bại trước khi có runId, sửa môi trường rồi chạy lại.
 
