@@ -19,11 +19,18 @@ Tài liệu này ghi nhận implementation; không thay đổi API contract bằ
 | GET | `/api/orders/{id}` | JWT, kiểm tra chủ đơn; theo dõi CONFIRMED/CANCELLED |
 | GET | `/api/orders/my-orders` | JWT, list đơn của user; chưa pagination |
 | POST | `/api/orders/{id}/cancel` | JWT, chủ đơn, chỉ PENDING; trạng thái khác trả 409 |
+| GET | `/api/orders/admin?status=CONFIRMED&page=0&size=20` | ADMIN; danh sách phân trang, lọc trạng thái tùy chọn, sắp `createdAt DESC, id DESC`; `size` từ 1 đến 100 |
+| GET | `/api/orders/admin/{id}` | ADMIN; chi tiết đơn bất kỳ |
+| POST | `/api/orders/{id}/ship` | ADMIN; chỉ CONFIRMED → SHIPPING; trả OrderResponse |
+| POST | `/api/orders/{id}/confirm-receipt` | USER là chủ đơn; chỉ SHIPPING → COMPLETED; trả OrderResponse |
+
 | POST | `/api/payments` | Đã đóng, kể cả ADMIN; payment chỉ tạo qua OrderCreatedEvent |
 | GET | `/api/payments/{orderId}` | JWT; chủ đơn hoặc ADMIN |
 | POST | `/api/payments/{id}/refund` | ADMIN; mock yêu cầu dấu hủy và xử lý idempotent; PAYOS trả 409, cần đối soát hoàn tiền thật |
 | POST | `/api/payments/webhooks/payos` | Chế độ payos; công khai, SDK xác minh chữ ký; ACK 200 |
 | GET | `/api/payments/payos/return`, `/api/payments/payos/cancel` | Chế độ payos; hướng dẫn kiểm tra trạng thái; không đổi trạng thái từ query string |
+
+Luồng giao hàng: thanh toán thành công đưa đơn từ PENDING sang CONFIRMED; ADMIN bắt đầu giao; khách hàng chủ đơn xác nhận đã nhận. Hai API chuyển trạng thái dùng transaction và khóa đơn, ghi lịch sử và Outbox cùng trạng thái. Gọi lặp lại hoặc sai trạng thái trả 409; sai quyền trả 403; không có đơn trả 404. Sự kiện `OrderShippedEvent` (`order.shipped`) và `OrderCompletedEvent` (`order.completed`) được Notification Service ghi log thông báo mô phỏng. Không tự động hoàn tất và không thay đổi tồn kho tại hai bước giao hàng.
 
 Ví dụ request tạo order, dùng ID/SKU sản phẩm đã có inventory trong Order:
 
