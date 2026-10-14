@@ -476,7 +476,7 @@
                 "{{orderId}}"
               ]
             },
-            "description": "Tra cuu chi tiet don hang (Yeu cau chu don hoac ADMIN)."
+            "description": "Tra cuu chi tiet don hang (chi chu don; ADMIN dung endpoint /api/orders/admin/{id})."
           }
         },
         {
@@ -526,6 +526,63 @@
               ]
             },
             "description": "Huy don hang (Chi cho phep khi don o trang thai PENDING; neu CONFIRMED tra ve 409 Conflict)."
+          }
+        },
+        {
+          "name": "Admin List Orders (Loc trang thai)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/admin?status=CONFIRMED&page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "admin"],
+              "query": [
+                { "key": "status", "value": "CONFIRMED" },
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            },
+            "description": "ADMIN xem don hang phan trang, co the bo status de xem tat ca."
+          }
+        },
+        {
+          "name": "Admin Get Order by ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/admin/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "admin", "{{orderId}}"]
+            },
+            "description": "ADMIN xem chi tiet don hang bat ky."
+          }
+        },
+        {
+          "name": "Admin Start Shipping",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/{{orderId}}/ship",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "{{orderId}}", "ship"]
+            },
+            "description": "ADMIN chuyen CONFIRMED sang SHIPPING; goi lap lai tra 409."
+          }
+        },
+        {
+          "name": "Customer Confirm Receipt",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/{{orderId}}/confirm-receipt",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders", "{{orderId}}", "confirm-receipt"]
+            },
+            "description": "Chu don xac nhan da nhan hang, chuyen SHIPPING sang COMPLETED; goi lap lai tra 409."
           }
         }
       ]
