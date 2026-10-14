@@ -25,6 +25,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -391,6 +393,63 @@ class OrderServiceTest {
             assertThat(order.getStatusHistories()).hasSize(2);
             verify(inventoryService).releaseStock(1L);
             verify(eventPublisher).publishOrderCancelledEvent(any());
+        }
+    }
+
+    @Nested
+    class FulfillmentTests {
+        @Test
+        void shipAndConfirmReceiptWriteOneHistoryAndEventEach() {
+            Order order = createMockOrder(OrderStatus.CONFIRMED);
+            when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
+            when(orderRepository.save(order)).thenReturn(order);
+
+            OrderResponse shipped = orderService.shipOrder(1L, "admin@example.com");
+            assertThat(shipped.getStatus()).isEqualTo("SHIPPING");
+            assertThat(shipped.getStatusHistories()).hasSize(2);
+            assertThat(shipped.getStatusHistories().get(1).getChangedBy()).isEqualTo("admin@example.com");
+            verify(eventPublisher).publishOrderShippedEvent(any());
+
+            OrderResponse completed = orderService.confirmReceipt(1L, USER_ID, USER_EMAIL);
+            assertThat(completed.getStatus()).isEqualTo("COMPLETED");
+            assertThat(completed.getStatusHistories()).hasSize(3);
+            assertThat(completed.getStatusHistories().get(2).getChangedBy()).isEqualTo(USER_EMAIL);
+            verify(eventPublisher).publishOrderCompletedEvent(any());
+            verifyNoInteractions(inventoryService);
+
+            assertThatThrownBy(() -> orderService.confirmReceipt(1L, USER_ID, USER_EMAIL))
+                    .isInstanceOf(InvalidOrderStatusException.class);
+            verify(eventPublisher, times(1)).publishOrderCompletedEvent(any());
+        }
+
+        @Test
+        void invalidTransitionsAndOtherCustomerDoNotPublish() {
+            Order order = createMockOrder(OrderStatus.PENDING);
+            when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
+
+            assertThatThrownBy(() -> orderService.shipOrder(1L, "admin@example.com"))
+                    .isInstanceOf(InvalidOrderStatusException.class);
+            assertThatThrownBy(() -> orderService.confirmReceipt(1L, USER_ID, USER_EMAIL))
+                    .isInstanceOf(InvalidOrderStatusException.class);
+            order.setStatus(OrderStatus.SHIPPING);
+            assertThatThrownBy(() -> orderService.confirmReceipt(1L, OTHER_USER_ID, "other@example.com"))
+                    .isInstanceOf(UnauthorizedOrderAccessException.class);
+            verifyNoInteractions(eventPublisher, inventoryService);
+        }
+
+        @Test
+        void adminListFiltersAndBoundsPage() {
+            Order order = createMockOrder(OrderStatus.CONFIRMED);
+            when(orderRepository.findByStatus(eq(OrderStatus.CONFIRMED), any(Pageable.class)))
+                    .thenReturn(new PageImpl<>(List.of(order)));
+
+            var result = orderService.getAdminOrders("confirmed", 0, 20);
+            assertThat(result.getContent()).hasSize(1);
+            assertThat(result.getContent().get(0).status()).isEqualTo("CONFIRMED");
+            assertThatThrownBy(() -> orderService.getAdminOrders("unknown", 0, 20))
+                    .isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> orderService.getAdminOrders(null, 0, 101))
+                    .isInstanceOf(IllegalArgumentException.class);
         }
     }
 }

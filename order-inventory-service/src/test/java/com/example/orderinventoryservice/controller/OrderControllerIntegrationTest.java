@@ -81,6 +81,23 @@ class OrderControllerIntegrationTest {
         );
     }
 
+    private UsernamePasswordAuthenticationToken createAdminAuth() {
+        JwtUserPrincipal principal = new JwtUserPrincipal(900L, "admin@example.com", "ADMIN");
+        return new UsernamePasswordAuthenticationToken(principal, null,
+                List.of(new SimpleGrantedAuthority("ROLE_ADMIN")));
+    }
+
+    private Order savedOrder(OrderStatus status) {
+        return orderRepository.save(Order.builder()
+                .userId(USER_ID)
+                .orderCode("TEST-" + java.util.UUID.randomUUID())
+                .status(status)
+                .totalAmount(BigDecimal.valueOf(100000))
+                .items(new ArrayList<>())
+                .statusHistories(new ArrayList<>())
+                .build());
+    }
+
     @BeforeEach
     void setUp() {
         orderItemRepository.deleteAll();
@@ -409,6 +426,61 @@ class OrderControllerIntegrationTest {
         mockMvc.perform(post("/api/orders/{id}/cancel", created.getId())
                         .with(authentication(createAuth(200L, "other@example.com"))))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void adminShipsAndOwnerConfirmsReceipt() throws Exception {
+        Order order = savedOrder(OrderStatus.CONFIRMED);
+
+        mockMvc.perform(get("/api/orders/admin").param("status", "CONFIRMED")
+                        .with(authentication(createAdminAuth())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(order.getId()));
+        mockMvc.perform(get("/api/orders/admin/{id}", order.getId())
+                        .with(authentication(createAdminAuth())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CONFIRMED"));
+        mockMvc.perform(post("/api/orders/{id}/ship", order.getId())
+                        .with(authentication(createAdminAuth())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("SHIPPING"))
+                .andExpect(jsonPath("$.statusHistories[0].changedBy").value("admin@example.com"));
+        mockMvc.perform(post("/api/orders/{id}/confirm-receipt", order.getId())
+                        .with(authentication(createAuth(USER_ID, USER_EMAIL))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.statusHistories[1].changedBy").value(USER_EMAIL));
+        mockMvc.perform(post("/api/orders/{id}/confirm-receipt", order.getId())
+                        .with(authentication(createAuth(USER_ID, USER_EMAIL))))
+                .andExpect(status().isConflict());
+        assertThat(orderStatusHistoryRepository.findByOrderIdOrderByChangedAtAsc(order.getId())).hasSize(2);
+    }
+
+    @Test
+    void fulfillmentChecksRolesOwnershipAndStatus() throws Exception {
+        Order confirmed = savedOrder(OrderStatus.CONFIRMED);
+        Order shipping = savedOrder(OrderStatus.SHIPPING);
+
+        mockMvc.perform(get("/api/orders/admin").with(authentication(createAuth(USER_ID, USER_EMAIL))))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/orders/{id}/ship", confirmed.getId())
+                        .with(authentication(createAuth(USER_ID, USER_EMAIL))))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/orders/{id}/confirm-receipt", shipping.getId())
+                        .with(authentication(createAdminAuth())))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/orders/{id}/confirm-receipt", shipping.getId())
+                        .with(authentication(createAuth(200L, "other@example.com"))))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/orders/{id}/confirm-receipt", confirmed.getId())
+                        .with(authentication(createAuth(USER_ID, USER_EMAIL))))
+                .andExpect(status().isConflict());
+        mockMvc.perform(post("/api/orders/{id}/ship", shipping.getId())
+                        .with(authentication(createAdminAuth())))
+                .andExpect(status().isConflict());
+        mockMvc.perform(get("/api/orders/admin").param("status", "INVALID")
+                        .with(authentication(createAdminAuth())))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
