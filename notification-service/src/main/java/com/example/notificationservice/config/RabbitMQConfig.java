@@ -47,6 +47,16 @@ public class RabbitMQConfig {
     }
 
     @Bean
+    public Binding orderShippedBinding(Queue notificationQueue, TopicExchange ecommerceExchange) {
+        return BindingBuilder.bind(notificationQueue).to(ecommerceExchange).with("order.shipped");
+    }
+
+    @Bean
+    public Binding orderCompletedBinding(Queue notificationQueue, TopicExchange ecommerceExchange) {
+        return BindingBuilder.bind(notificationQueue).to(ecommerceExchange).with("order.completed");
+    }
+
+    @Bean
     public Binding paymentRefundedBinding(Queue notificationQueue, TopicExchange ecommerceExchange) {
         return BindingBuilder.bind(notificationQueue).to(ecommerceExchange).with("payment.refunded");
     }

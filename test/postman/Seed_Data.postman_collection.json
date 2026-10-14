@@ -1,0 +1,237 @@
+{
+  "info": {
+    "_postman_id": "7b8e1f20-5c62-4d9a-9e11-382a4d95b701",
+    "name": "Omnichannel E-Commerce - Seed Data Runner",
+    "description": "Collection chuyen dung de Seed du lieu mau (Products, Categories, Users) tu file sample_products.json bang Newman CLI hoac Postman Collection Runner.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "adminEmail",
+      "value": "admin@example.test",
+      "type": "string"
+    },
+    {
+      "key": "adminPassword",
+      "value": "Password123!",
+      "type": "string"
+    },
+    {
+      "key": "adminToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "categoryId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "01. Login Admin",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 200) {",
+              "    var data = pm.response.json();",
+              "    pm.collectionVariables.set('adminToken', data.accessToken);",
+              "    console.log('Admin login thanh cong. Token da duoc luu.');",
+              "} else {",
+              "    console.error('Login Admin that bai:', pm.response.text());",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "login"
+          ]
+        },
+        "description": "Dang nhap tai khoan Admin de lay Bearer Token cho cac request tao du lieu."
+      }
+    },
+    {
+      "name": "02. Ensure Category",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Kiem tra neu categoryName duoc truyen tu data file",
+              "var catName = pm.iterationData.get('categoryName') || 'Electronics';",
+              "var catDesc = pm.iterationData.get('categoryDescription') || 'Cac san pham cong nghe thiet yeu';",
+              "pm.variables.set('reqCatName', catName);",
+              "pm.variables.set('reqCatDesc', catDesc);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 201) {",
+              "    var data = pm.response.json();",
+              "    pm.collectionVariables.set('categoryId', data.id);",
+              "    console.log('Tao category moi thanh cong:', data.name, '-> ID:', data.id);",
+              "} else {",
+              "    // Neu da ton tai, tim id cua category theo ten",
+              "    pm.sendRequest({",
+              "        url: pm.variables.get('baseUrl') + '/api/categories',",
+              "        method: 'GET'",
+              "    }, function (err, res) {",
+              "        if (!err && res.code === 200) {",
+              "            var list = res.json();",
+              "            var targetName = pm.variables.get('reqCatName');",
+              "            var found = list.find(function(c) { return c.name === targetName; });",
+              "            if (found) {",
+              "                pm.collectionVariables.set('categoryId', found.id);",
+              "                console.log('Su dung category da co:', found.name, '-> ID:', found.id);",
+              "            } else if (list.length > 0) {",
+              "                pm.collectionVariables.set('categoryId', list[0].id);",
+              "                console.log('Fallback su dung category dau tien:', list[0].name, '-> ID:', list[0].id);",
+              "            }",
+              "        }",
+              "    });",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"{{reqCatName}}\",\n  \"description\": \"{{reqCatDesc}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/categories",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "categories"
+          ]
+        },
+        "description": "Kiem tra hoac tao Danh muc san pham va luu categoryId cho buoc tiep theo."
+      }
+    },
+    {
+      "name": "03. Create Product",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Fallback neu chay don le khong co data file",
+              "var name = pm.iterationData.get('name') || 'San pham Mau ' + Date.now();",
+              "var brand = pm.iterationData.get('brand') || 'DemoBrand';",
+              "var desc = pm.iterationData.get('description') || 'Mo ta san pham mau';",
+              "var sku = pm.iterationData.get('sku') || ('SKU-' + Math.floor(Math.random() * 1000000));",
+              "var variantName = pm.iterationData.get('variantName') || 'Standard';",
+              "var price = pm.iterationData.get('price') || 100000;",
+              "var oldPrice = pm.iterationData.get('oldPrice') || 120000;",
+              "var stock = pm.iterationData.get('stock') || 50;",
+              "var imageUrl = pm.iterationData.get('imageUrl') || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30';",
+              "",
+              "pm.variables.set('pName', name);",
+              "pm.variables.set('pBrand', brand);",
+              "pm.variables.set('pDesc', desc);",
+              "pm.variables.set('pSku', sku);",
+              "pm.variables.set('pVariantName', variantName);",
+              "pm.variables.set('pPrice', price);",
+              "pm.variables.set('pOldPrice', oldPrice);",
+              "pm.variables.set('pStock', stock);",
+              "pm.variables.set('pImageUrl', imageUrl);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 201) {",
+              "    var data = pm.response.json();",
+              "    console.log('[SUCCESS] Tao san pham:', data.name, '| SKU:', pm.variables.get('pSku'), '| ID:', data.id);",
+              "} else if (pm.response.code === 400 && pm.response.text().includes('already belongs')) {",
+              "    console.warn('[SKIP] SKU da ton tai:', pm.variables.get('pSku'));",
+              "} else {",
+              "    console.error('[ERROR] Tao san pham that bai:', pm.response.status, pm.response.text());",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"{{pName}}\",\n  \"description\": \"{{pDesc}}\",\n  \"brand\": \"{{pBrand}}\",\n  \"categoryId\": \"{{categoryId}}\",\n  \"variants\": [\n    {\n      \"sku\": \"{{pSku}}\",\n      \"name\": \"{{pVariantName}}\",\n      \"price\": {{pPrice}},\n      \"oldPrice\": {{pOldPrice}},\n      \"stock\": {{pStock}},\n      \"imageUrl\": \"{{pImageUrl}}\"\n    }\n  ]\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/products",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "products"
+          ]
+        },
+        "description": "Tao san pham voi cac thuoc tinh va bien the duoc lay tu du lieu data file."
+      }
+    }
+  ]
+}
