@@ -24,6 +24,14 @@ public class EventPublisher {
         save("order.cancelled", event);
     }
 
+    public void publishOrderShippedEvent(Object event) {
+        save("order.shipped", event);
+    }
+
+    public void publishOrderCompletedEvent(Object event) {
+        save("order.completed", event);
+    }
+
     public void publishInventorySyncedEvent(Object event) {
         save("catalog.inventory.synced", event);
     }
