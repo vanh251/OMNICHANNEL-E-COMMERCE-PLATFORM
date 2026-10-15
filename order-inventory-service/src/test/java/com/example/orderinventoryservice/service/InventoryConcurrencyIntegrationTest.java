@@ -5,6 +5,9 @@ import com.example.orderinventoryservice.PostgresTestDatabase;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import com.example.orderinventoryservice.exception.InsufficientStockException;
+import com.example.orderinventoryservice.exception.InvalidStockAdjustmentException;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import com.example.orderinventoryservice.repository.InventoryRepository;
 import com.example.orderinventoryservice.repository.InventoryReservationRepository;
 import com.example.orderinventoryservice.repository.OrderRepository;
@@ -333,6 +336,111 @@ public class InventoryConcurrencyIntegrationTest {
             assertThat(outboxRepository.findAll().stream()
                     .filter(event -> event.getRoutingKey().equals("order.cancelled")).count())
                     .isEqualTo(cancelled ? 1 : 0);
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void concurrentRestocksAndReservationsDoNotLoseUpdates() throws Exception {
+        ExecutorService executor = Executors.newFixedThreadPool(16);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<?>> futures = new ArrayList<>();
+        AtomicInteger reserved = new AtomicInteger();
+        try {
+            for (int i = 0; i < 40; i++) {
+                final long orderId = 5000L + i;
+                futures.add(executor.submit(() -> {
+                    awaitStart(start);
+                    inventoryService.adjustStock(FLASH_SKU, 1, "admin@example.test");
+                }));
+                futures.add(executor.submit(() -> {
+                    awaitStart(start);
+                    try {
+                        inventoryService.reserveStock(orderId, FLASH_SKU, 1);
+                        reserved.incrementAndGet();
+                    } catch (InsufficientStockException expected) {
+                        // Reservations may precede restocks; they must never oversell.
+                    }
+                }));
+            }
+            start.countDown();
+            for (Future<?> future : futures) {
+                future.get(30, TimeUnit.SECONDS);
+            }
+            Inventory result = inventoryRepository.findBySku(FLASH_SKU).orElseThrow();
+            assertThat(result.getTotalStock()).isEqualTo(41);
+            assertThat(result.getReservedStock()).isEqualTo(reserved.get());
+            assertThat(result.getAvailableStock()).isEqualTo(41 - reserved.get());
+            assertThat(reservationRepository.count()).isEqualTo(reserved.get());
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void removalAndReservationCannotBothConsumeTheLastUnit() throws Exception {
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            Future<Boolean> adjustment = executor.submit(() -> {
+                awaitStart(start);
+                try {
+                    inventoryService.adjustStock(FLASH_SKU, -1, "admin@example.test");
+                    return true;
+                } catch (InvalidStockAdjustmentException expected) {
+                    return false;
+                }
+            });
+            Future<Boolean> reservation = executor.submit(() -> {
+                awaitStart(start);
+                try {
+                    inventoryService.reserveStock(6000L, FLASH_SKU, 1);
+                    return true;
+                } catch (InsufficientStockException expected) {
+                    return false;
+                }
+            });
+            start.countDown();
+            boolean removed = adjustment.get(30, TimeUnit.SECONDS);
+            boolean reserved = reservation.get(30, TimeUnit.SECONDS);
+            assertThat(removed).isNotEqualTo(reserved);
+            Inventory result = inventoryRepository.findBySku(FLASH_SKU).orElseThrow();
+            assertThat(result.getAvailableStock()).isZero();
+            assertThat(result.getTotalStock()).isEqualTo(reserved ? 1 : 0);
+            assertThat(result.getReservedStock()).isEqualTo(reserved ? 1 : 0);
+            assertThat(reservationRepository.count()).isEqualTo(reserved ? 1 : 0);
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void restockRacingConfirmationOrReleasePreservesStock(boolean confirm) throws Exception {
+        inventoryService.reserveStock(7000L, FLASH_SKU, 1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            Future<?> restock = executor.submit(() -> {
+                awaitStart(start);
+                inventoryService.adjustStock(FLASH_SKU, 20, "admin@example.test");
+            });
+            Future<?> terminal = executor.submit(() -> {
+                awaitStart(start);
+                if (confirm) {
+                    inventoryService.confirmStock(7000L);
+                } else {
+                    inventoryService.releaseStock(7000L);
+                }
+            });
+            start.countDown();
+            restock.get(30, TimeUnit.SECONDS);
+            terminal.get(30, TimeUnit.SECONDS);
+            Inventory result = inventoryRepository.findBySku(FLASH_SKU).orElseThrow();
+            assertThat(result.getReservedStock()).isZero();
+            assertThat(result.getTotalStock()).isEqualTo(confirm ? 20 : 21);
+            assertThat(result.getAvailableStock()).isEqualTo(result.getTotalStock());
         } finally {
             executor.shutdownNow();
         }
