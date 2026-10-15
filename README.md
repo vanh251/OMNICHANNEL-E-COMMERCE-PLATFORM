@@ -25,18 +25,18 @@ docker compose up -d --build --wait --wait-timeout 300
 python infrastructure/day14/run-demo.py
 ```
 
-Linux dùng `cp .env.example .env` và `python3`. Gateway ở `http://localhost:8080`, Grafana ở `http://localhost:3000`, Prometheus ở `http://localhost:9090`. Tài khoản Grafana lấy từ `.env`. Không chạy đồng thời hai file Compose local/production: chúng dùng chung tên container và volume.
+Linux dùng `cp .env.example .env` và `python3`. Gateway ở `http://localhost:8080`, Grafana ở `http://localhost:3000`, Prometheus ở `http://localhost:9090`, và Mailpit Web UI ở `http://localhost:8025` (xem email xác thực và thông báo đơn hàng). Tài khoản Grafana lấy từ `.env`. Thư mục `test/postman/` cung cấp sẵn bộ sưu tập Postman hoàn chỉnh để kiểm thử API thủ công (xem [hướng dẫn Postman](test/postman/README.md)). Không chạy đồng thời hai file Compose local/production: chúng dùng chung tên container và volume.
 
 ## 2. Phân tích kiến trúc Microservices
 
 | Service | Trách nhiệm thực tế | Dữ liệu sở hữu | Cổng trong Docker |
 | --- | --- | --- | --- |
 | API Gateway | Định tuyến REST đến service | Không có DB | 8080 |
-| Identity | Đăng ký, đăng nhập, JWT, hồ sơ và kiểm tra ADMIN | PostgreSQL `identity_db` | 8081 |
-| Product | CRUD sản phẩm, biến thể SKU, danh mục; xác minh SKU/giá qua gRPC | MongoDB `product_db` | 8082 REST, 9090 gRPC |
-| Order & Inventory | Đặt/hủy đơn, giữ/trừ/hoàn tồn, lịch sử trạng thái, Outbox | PostgreSQL `order_db` | 8083 |
+| Identity | Đăng ký (xác minh email), đăng nhập, JWT, hồ sơ và kiểm tra ADMIN | PostgreSQL `identity_db` | 8081 |
+| Product | CRUD sản phẩm, biến thể SKU, danh mục; xác minh SKU/giá qua gRPC; đồng bộ tồn ban đầu | MongoDB `product_db` | 8082 REST, 9090 gRPC |
+| Order & Inventory | Đặt/hủy đơn, vòng đời giao hàng (CONFIRMED → SHIPPING → COMPLETED), giữ/trừ/hoàn tồn, tra cứu và điều chỉnh tồn kho theo SKU, Outbox | PostgreSQL `order_db` | 8083 |
 | Payment | Mock hoặc payOS: tạo checkout, xác minh webhook, reconciliation và Outbox; hoàn tiền thật chưa tích hợp | PostgreSQL `payment_db` | 8084 |
-| Notification | Nhận event RabbitMQ và ghi log `[EMAIL]` | Chưa lưu notification; cấu hình MongoDB đã có | 8085 |
+| Notification | Nhận event RabbitMQ, lưu job vào MongoDB và gửi email giao dịch qua SMTP/Mailpit | MongoDB `notification_db` (collection `email_deliveries`) | 8085 |
 
 ```mermaid
 flowchart LR
@@ -53,12 +53,14 @@ flowchart LR
     Payment --> PaymentDB[(payment_db + Outbox)]
     Payment -->|HTTPS SDK: tạo link / reconciliation| PayOS[payOS]
     PayOS -->|HTTPS webhook có chữ ký| Nginx
-    Order -->|Outbox: order.created / order.cancelled| MQ[RabbitMQ ecommerce.exchange]
-    MQ -->|payment.queue: order.created / order.cancelled| Payment
-    Payment -->|Outbox: payment.succeeded / payment.failed / payment.refunded| MQ
+    Identity -->|Outbox: user.registered / verification| MQ[RabbitMQ ecommerce.exchange]
+    Order -->|Outbox: order.created / cancelled / shipped / completed| MQ
+    Payment -->|Outbox: payment.succeeded / failed / refunded| MQ
+    MQ -->|payment.queue| Payment
     MQ -->|order.queue| Order
     MQ -->|notification.queue| Notification
-    Notification --> EmailLog[Log mô phỏng email]
+    Notification --> NotificationDB[(notification_db MongoDB)]
+    Notification --> MailService[SMTP Server / Mailpit]
 ```
 
 ### 2.1. Cơ chế giao tiếp
@@ -67,7 +69,7 @@ flowchart LR
 - **gRPC (HTTP/2, Protocol Buffers):** Order gọi `ProductGrpcService.VerifyProductDetails` để lấy SKU, tên và giá. Contract ở [product.proto](product-service/src/main/proto/product.proto); latency phải đo thực tế, không mặc định đạt dưới 5 ms.
 - **Event-driven queue (RabbitMQ):** publisher đưa event từ Outbox vào topic exchange `ecommerce.exchange`; các queue `payment.queue`, `order.queue`, `notification.queue` tách công việc của từng consumer. Retry/phát lại đòi hỏi xử lý idempotent, xác nhận message và theo dõi backlog.
 
-Service chỉ truy cập DB của mình. PostgreSQL có thể dùng chung một container cho demo nhưng các database tách biệt. Redis có trong stack; giữ tồn hiện được bảo vệ bằng **SQL UPDATE có điều kiện trong transaction PostgreSQL**, không dùng Redis lock. Dữ liệu tồn có thẩm quyền nằm ở Order; trường `stock` của catalog chỉ là tồn ban đầu, không thay thế kiểm tra tồn khi đặt hàng. ADMIN xem tồn qua `GET /api/inventory` hoặc `GET /api/inventory/{sku}`, nhập/giảm tồn bằng `POST /api/inventory/{sku}/adjustments` với `quantityDelta` có dấu. Khi sửa thông tin SKU đã có bằng PUT product, có thể bỏ qua `stock`. Xem [hợp đồng và ví dụ API](docs/api-runtime.md).
+Service chỉ truy cập DB của mình. PostgreSQL có thể dùng chung một container cho demo nhưng các database tách biệt. Redis có trong stack; giữ tồn hiện được bảo vệ bằng **SQL UPDATE có điều kiện trong transaction PostgreSQL**, không dùng Redis lock. Dữ liệu tồn có thẩm quyền nằm ở Order & Inventory; trường `stock` của catalog chỉ là tồn ban đầu khi tạo sản phẩm, không thay thế kiểm tra tồn khi đặt hàng và không bị ghi đè khi cập nhật thông tin sản phẩm (PUT product). ADMIN xem tồn qua `GET /api/inventory` hoặc `GET /api/inventory/{sku}`, nhập/giảm tồn bằng `POST /api/inventory/{sku}/adjustments` với `quantityDelta` có dấu. Vòng đời đơn hàng sau thanh toán được quản lý chặt chẽ: ADMIN chuyển trạng thái giao hàng qua `POST /api/orders/{id}/ship` (CONFIRMED → SHIPPING), và khách hàng xác nhận nhận hàng qua `POST /api/orders/{id}/confirm-receipt` (SHIPPING → COMPLETED); các bước này đều phát sự kiện gửi email tương ứng. Xem [hợp đồng và ví dụ API](docs/api-runtime.md).
 
 ```mermaid
 sequenceDiagram
@@ -82,13 +84,14 @@ sequenceDiagram
     participant N as Notification
     User->>G: Register / Login
     G->>I: REST
-    I-->>User: JWT access token (qua Gateway)
+    I-->>User: JWT access token + emailVerified (qua Gateway)
+    Note over I,N: Đăng ký phát event để N gửi link xác minh email 24h
     User->>G: GET product; POST order + Bearer JWT
     G->>P: GET product
     G->>O: POST /api/orders
     O->>P: gRPC VerifyProductDetails
     P-->>O: SKU, tên và giá có thẩm quyền
-    O->>O: Transaction: giữ tồn + PENDING + Outbox
+    O->>O: Transaction: giữ tồn + PENDING + Outbox (kèm email snapshot)
     O-->>User: HTTP 201 (qua Gateway)
     O->>Q: Outbox publisher: OrderCreatedEvent
     Q->>Pay: payment.queue
@@ -114,11 +117,11 @@ sequenceDiagram
         O->>Q: OrderCancelledEvent
     end
     Q->>N: Các event qua notification.queue
-    N->>N: Ghi log mô phỏng email
+    N->>N: Lưu job vào MongoDB (dedup theo eventId) & gửi email qua SMTP
     Note over Q,N: Nếu N dừng, durable queue giữ message để xử lý khi N chạy lại
 ```
 
-HTTP 201 chỉ xác nhận đã tạo đơn. Client đọc lại trạng thái đơn để biết Saga hoàn tất. Publisher dùng batch và publisher confirms; consumer phải chịu được phát lại message. Hiện Payment chống tạo trùng theo `orderId`, Order kiểm soát trạng thái; Notification chưa có lưu trữ chống gửi trùng theo `eventId`.
+HTTP 201 chỉ xác nhận đã tạo đơn. Client đọc lại trạng thái đơn để biết Saga hoàn tất. Publisher dùng batch và publisher confirms; consumer phải chịu được phát lại message. Payment chống tạo trùng theo `orderId`; Order kiểm soát trạng thái; Notification lưu trữ job trong MongoDB với unique index theo `eventId` để chống gửi trùng email.
 
 ## 3. Hướng dẫn tìm hiểu và phân tích hệ thống
 
@@ -205,6 +208,10 @@ Thay password mẫu và `JWT_SECRET` trong `.env`, giữ cùng JWT secret giữa
 
 - Demo/load test: `PAYMENT_PROVIDER=mock`, sử dụng môi trường riêng.
 - payOS: `PAYMENT_PROVIDER=payos`, cấu hình `PAYOS_CLIENT_ID`, `PAYOS_API_KEY`, `PAYOS_CHECKSUM_KEY` và return/cancel/webhook URL theo [hướng dẫn tích hợp](docs/payos-integration.md). Không dùng giao dịch tiền thật để chạy k6 hoặc runner mock.
+- Email/SMTP (bắt buộc trên production Compose): cấu hình `EMAIL_VERIFICATION_BASE_URL` (URL Gateway public, ví dụ `https://api-vanhdz.duckdns.org`), `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM` theo [hướng dẫn email giao dịch](docs/email-delivery.md).
+
+> [!TIP]
+> **Bảo trì dung lượng ổ đĩa VPS:** Trước khi kéo image mới trên VPS có phân vùng ổ đĩa hạn chế (ví dụ 20 GB), hãy kiểm tra `df -h /`. Nên chạy `docker system prune -af` để dọn dẹp image cũ và build cache, tránh lỗi thiếu dung lượng (`no space left on device`) trong quá trình deploy.
 
 ```bash
 docker compose -f docker-compose.production.yml config --quiet
@@ -273,7 +280,7 @@ VPS/HTTPS, deploy remote và giao dịch payOS thực phải được nghiệm t
 
 | Nhóm | Tiêu chí nghiệm thu / bằng chứng |
 | --- | --- |
-| Chức năng | Register/Login/JWT và xác minh email; CRUD catalog; POST order → payment SUCCESS → CONFIRMED → email Notification đúng orderId |
+| Chức năng | Register/Login/JWT và xác minh email; CRUD catalog; tra cứu/điều chỉnh tồn kho; POST order → payment SUCCESS → CONFIRMED → giao hàng (SHIPPING → COMPLETED) → email Notification đúng orderId |
 | Flash sale | Tồn 10; 500 worker cùng qua barrier, mỗi worker gửi 1 POST; đúng 10 HTTP 201, 490 lỗi thiếu tồn; 0 lỗi bất thường; 10 CONFIRMED; total/available/reserved đều 0 |
 | Compensation | Mock amount > 10000 → FAILED → CANCELLED; stock trở lại ban đầu, reserved = 0 |
 | Chịu lỗi | Stop Notification; order/payment vẫn thành công; queue giữ event; start lại, đủ email trong Mailpit và queue về 0 |
@@ -290,11 +297,11 @@ Gợi ý thang điểm: kiến trúc và DDD **20%**, chức năng/API/bảo m�
 
 ### 5.2. Kịch bản demo bắt buộc
 
-1. **Luồng thành công:** đăng ký/đăng nhập, ADMIN tạo sản phẩm và tồn, khách tạo đơn; theo dõi payment, CONFIRMED và log thông báo cùng orderId.
+1. **Luồng thành công:** đăng ký/đăng nhập (xác minh email qua token một lần), ADMIN tạo sản phẩm và quản lý tồn qua API Inventory, khách tạo đơn; theo dõi payment, CONFIRMED, giao hàng (SHIPPING → COMPLETED) và email thông báo tương ứng.
 2. **Flash sale:** tồn 10, 500 worker qua barrier; trình bày 10 đơn được chấp nhận, 490 lỗi thiếu tồn và đối chiếu số tồn sau Saga.
 3. **Thanh toán thất bại:** trên mock, amount > 10000 dẫn tới FAILED/CANCELLED; tồn được hoàn và reserved về 0.
-4. **Sự cố Notification:** dừng service, chứng minh Order/Payment vẫn xử lý; khởi động lại, chứng minh queue được tiêu thụ và log xuất hiện.
-5. **Bảo mật và phát lại:** token thiếu/sai, người khác đọc payment, khách ghi catalog; đối chiếu 401/403 và quyền ADMIN. Phát lại event để kiểm tra không trừ kho/thu tiền lần hai; báo cáo giới hạn dedup Notification.
+4. **Sự cố Notification:** dừng service, chứng minh Order/Payment vẫn xử lý; khởi động lại, chứng minh queue được tiêu thụ và email xuất hiện trong Mailpit.
+5. **Bảo mật và phát lại:** token thiếu/sai, người khác đọc payment, khách ghi catalog; đối chiếu 401/403 và quyền ADMIN. Phát lại event để kiểm tra không trừ kho/thu tiền lần hai; kiểm tra cơ chế dedup Notification qua unique eventId.
 6. **Vận hành:** truy cập API bằng domain HTTPS, lần CI/deploy thành công, dashboard metric/log, chứng chỉ và kiểm tra cổng từ máy ngoài.
 7. **payOS nếu chọn nghiệm thu tích hợp:** tạo checkout với số tiền nhỏ đã thống nhất, xác minh webhook/Saga; chứng minh return URL hoặc webhook sai chữ ký không thể tự xác nhận thanh toán. Ghi rõ hoàn tiền thật chưa hỗ trợ.
 
