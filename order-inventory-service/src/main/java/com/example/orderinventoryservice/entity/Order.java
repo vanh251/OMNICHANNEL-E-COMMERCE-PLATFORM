@@ -36,6 +36,9 @@ public class Order {
 
     private String shippingAddress;
 
+    // Snapshot at order creation. Null on orders created before email delivery was added.
+    private String recipientEmail;
+
     private String note;
 
     @Column(nullable = false, updatable = false)

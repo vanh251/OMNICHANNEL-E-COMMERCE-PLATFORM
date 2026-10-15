@@ -22,6 +22,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.Map;
 import java.util.UUID;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -40,6 +41,7 @@ public class ProductService {
                 .orElseThrow(() -> new ResourceNotFoundException("Category not found with id: " + request.getCategoryId()));
 
         validateSkus(request.getVariants(), null);
+        request.getVariants().forEach(this::validateInitialStock);
         LocalDateTime now = LocalDateTime.now();
         List<ProductVariant> variants = request.getVariants().stream()
                 .map(this::mapToVariantEntity)
@@ -91,25 +93,25 @@ public class ProductService {
                 .orElseThrow(() -> new ResourceNotFoundException("Category not found with id: " + request.getCategoryId()));
 
         validateSkus(request.getVariants(), id);
-        Set<String> existingSkus = product.getVariants().stream()
-                .map(ProductVariant::getSku).collect(Collectors.toSet());
-        for (ProductVariantDTO variant : request.getVariants()) {
-            product.getVariants().stream()
-                    .filter(existing -> existing.getSku().equals(variant.getSku().trim()))
-                    .findFirst()
-                    .ifPresent(existing -> {
-                        if (!Objects.equals(existing.getStock(), variant.getStock())) {
-                            throw new IllegalArgumentException(
-                                    "Existing SKU stock is managed by inventory service: " + existing.getSku());
-                        }
-                    });
-        }
-        boolean addedSku = request.getVariants().stream()
-                .anyMatch(variant -> !existingSkus.contains(variant.getSku()));
-
+        Map<String, ProductVariant> existingVariants = product.getVariants().stream()
+                .collect(Collectors.toMap(ProductVariant::getSku, variant -> variant, (first, second) -> first));
         List<ProductVariant> variants = request.getVariants().stream()
-                .map(this::mapToVariantEntity)
+                .map(variant -> {
+                    ProductVariant existing = existingVariants.get(variant.getSku().trim());
+                    if (existing == null) {
+                        validateInitialStock(variant);
+                    } else if (variant.getStock() != null && !Objects.equals(existing.getStock(), variant.getStock())) {
+                        throw new IllegalArgumentException("Existing SKU stock is managed by inventory service: "
+                                + existing.getSku() + "; use /api/inventory/{sku}/adjustments");
+                    }
+                    ProductVariant updated = mapToVariantEntity(variant);
+                    if (existing != null) {
+                        updated.setStock(existing.getStock());
+                    }
+                    return updated;
+                })
                 .collect(Collectors.toList());
+        boolean addedSku = variants.stream().anyMatch(variant -> !existingVariants.containsKey(variant.getSku()));
 
         Update changes = new Update()
                 .set("name", request.getName().trim())
@@ -150,6 +152,12 @@ public class ProductService {
                 .stock(dto.getStock())
                 .imageUrl(dto.getImageUrl())
                 .build();
+    }
+
+    private void validateInitialStock(ProductVariantDTO variant) {
+        if (variant.getStock() == null || variant.getStock() < 0) {
+            throw new IllegalArgumentException("Non-negative initial stock is required for new SKU: " + variant.getSku());
+        }
     }
 
     private void validateSkus(List<ProductVariantDTO> variants, String currentProductId) {

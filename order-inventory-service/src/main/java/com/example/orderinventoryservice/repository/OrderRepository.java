@@ -7,6 +7,9 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import com.example.orderinventoryservice.entity.OrderStatus;
 
 import java.util.List;
 import java.util.Optional;
@@ -15,6 +18,8 @@ import java.util.Optional;
 public interface OrderRepository extends JpaRepository<Order, Long> {
 
     List<Order> findByUserIdOrderByCreatedAtDesc(Long userId);
+
+    Page<Order> findByStatus(OrderStatus status, Pageable pageable);
 
     Optional<Order> findByOrderCode(String orderCode);
 

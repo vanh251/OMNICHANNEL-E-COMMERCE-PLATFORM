@@ -1,5 +1,6 @@
 package com.example.productservice.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -27,8 +28,10 @@ public class ProductVariantDTO {
     @DecimalMin(value = "0.01", message = "Old price must be greater than 0")
     private BigDecimal oldPrice;
 
-    @NotNull(message = "Stock is required")
     @Min(value = 0, message = "Stock must be greater than or equal to 0")
+    @Schema(description = "Initial stock, required for a new SKU and optional when editing an existing SKU. "
+            + "This is not current availability; use /api/inventory/{sku}. "
+            + "Existing SKU stock must be adjusted through the inventory API.")
     private Integer stock;
 
     private String imageUrl;

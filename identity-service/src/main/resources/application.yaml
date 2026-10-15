@@ -10,11 +10,22 @@ spring:
     username: ${POSTGRES_USER:${DB_USERNAME:postgres}}
     password: ${POSTGRES_PASSWORD:${DB_PASSWORD:postgres}}
 
+  rabbitmq:
+    publisher-confirm-type: simple
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:admin}
+    password: ${RABBITMQ_PASSWORD:rabbit123}
+    virtual-host: ${RABBITMQ_VHOST:/}
+
   jpa:
     hibernate:
       ddl-auto: update
     show-sql: false
     open-in-view: false
+
+email:
+  verification-base-url: ${EMAIL_VERIFICATION_BASE_URL:http://localhost:8080}
 
 management:
   metrics:

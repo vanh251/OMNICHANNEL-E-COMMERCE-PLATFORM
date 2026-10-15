@@ -1,5 +1,7 @@
 # Omnichannel E-Commerce Platform
 
+Email xác minh tài khoản và thông báo đơn hàng dùng SMTP; Compose local dùng Mailpit, production yêu cầu cấu hình máy chủ SMTP. Xem [hướng dẫn email giao dịch](docs/email-delivery.md).
+
 ## 1. Tổng quan đề tài
 
 **Tên đề tài:** Thiết kế, xây dựng và triển khai nền tảng thương mại điện tử đa kênh theo kiến trúc Microservices.
@@ -8,7 +10,7 @@ Nền tảng thương mại điện tử đa kênh, xây dựng bằng Java 17 v
 
 Trong doanh nghiệp, một thao tác đặt hàng liên quan nhiều nguồn dữ liệu và có thể thất bại từng phần. Dự án thực hành ranh giới nghiệp vụ, giao dịch cục bộ, Saga compensation và Transactional Outbox để giải quyết tình huống đó. Các kênh web, mobile và cửa hàng cần dùng chung nguồn dữ liệu để tránh lệch giá, tồn kho và trạng thái đơn. Microservices cho phép các nhóm phát triển và mở rộng từng nghiệp vụ độc lập; đổi lại, doanh nghiệp phải quản lý độ trễ, lỗi từng phần và tính nhất quán cuối cùng. Việc lựa chọn kiến trúc cần dựa trên quy mô và nhu cầu vận hành.
 
-Phiên bản hiện tại cung cấp backend API và nhận thanh toán qua [payOS](docs/payos-integration.md); chưa tích hợp sàn thương mại điện tử hay email thật.
+Phiên bản hiện tại cung cấp backend API, nhận thanh toán qua [payOS](docs/payos-integration.md) và gửi email giao dịch qua SMTP; chưa tích hợp sàn thương mại điện tử.
 
 Chạy local từ thư mục gốc, cần Docker Compose v2 và Python 3.10+ cho demo; cần JDK 17 nếu chạy Gradle ngoài Docker:
 
@@ -65,7 +67,7 @@ flowchart LR
 - **gRPC (HTTP/2, Protocol Buffers):** Order gọi `ProductGrpcService.VerifyProductDetails` để lấy SKU, tên và giá. Contract ở [product.proto](product-service/src/main/proto/product.proto); latency phải đo thực tế, không mặc định đạt dưới 5 ms.
 - **Event-driven queue (RabbitMQ):** publisher đưa event từ Outbox vào topic exchange `ecommerce.exchange`; các queue `payment.queue`, `order.queue`, `notification.queue` tách công việc của từng consumer. Retry/phát lại đòi hỏi xử lý idempotent, xác nhận message và theo dõi backlog.
 
-Service chỉ truy cập DB của mình. PostgreSQL có thể dùng chung một container cho demo nhưng các database tách biệt. Redis có trong stack; giữ tồn hiện được bảo vệ bằng **SQL UPDATE có điều kiện trong transaction PostgreSQL**, không dùng Redis lock. Dữ liệu tồn có thẩm quyền nằm ở Order; trường `stock` của catalog không thay thế kiểm tra tồn khi đặt hàng.
+Service chỉ truy cập DB của mình. PostgreSQL có thể dùng chung một container cho demo nhưng các database tách biệt. Redis có trong stack; giữ tồn hiện được bảo vệ bằng **SQL UPDATE có điều kiện trong transaction PostgreSQL**, không dùng Redis lock. Dữ liệu tồn có thẩm quyền nằm ở Order; trường `stock` của catalog chỉ là tồn ban đầu, không thay thế kiểm tra tồn khi đặt hàng. ADMIN xem tồn qua `GET /api/inventory` hoặc `GET /api/inventory/{sku}`, nhập/giảm tồn bằng `POST /api/inventory/{sku}/adjustments` với `quantityDelta` có dấu. Khi sửa thông tin SKU đã có bằng PUT product, có thể bỏ qua `stock`. Xem [hợp đồng và ví dụ API](docs/api-runtime.md).
 
 ```mermaid
 sequenceDiagram
@@ -271,10 +273,10 @@ VPS/HTTPS, deploy remote và giao dịch payOS thực phải được nghiệm t
 
 | Nhóm | Tiêu chí nghiệm thu / bằng chứng |
 | --- | --- |
-| Chức năng | Register/Login/JWT; CRUD catalog; POST order → payment SUCCESS → CONFIRMED → log notification đúng orderId |
+| Chức năng | Register/Login/JWT và xác minh email; CRUD catalog; POST order → payment SUCCESS → CONFIRMED → email Notification đúng orderId |
 | Flash sale | Tồn 10; 500 worker cùng qua barrier, mỗi worker gửi 1 POST; đúng 10 HTTP 201, 490 lỗi thiếu tồn; 0 lỗi bất thường; 10 CONFIRMED; total/available/reserved đều 0 |
 | Compensation | Mock amount > 10000 → FAILED → CANCELLED; stock trở lại ban đầu, reserved = 0 |
-| Chịu lỗi | Stop Notification; order/payment vẫn thành công; queue giữ event; start lại, đủ log và queue về 0 |
+| Chịu lỗi | Stop Notification; order/payment vẫn thành công; queue giữ event; start lại, đủ email trong Mailpit và queue về 0 |
 | Nhất quán | Test stock concurrency, rollback và Outbox trên PostgreSQL; trạng thái và event cùng transaction; kiểm tra hành vi khi message phát lại |
 | Hiệu năng | Báo cáo target/achieved RPS, p95, lỗi và dropped iterations. Mục tiêu Day 13 p95 < 2000 ms, lỗi < 1%, không bỏ iteration; không tính lỗi hết hàng chủ đích của flash sale là lỗi tải thông thường |
 | Vận hành | Compose healthy; API qua HTTPS thật; TLS renewal thử thành công; chỉ mở SSH/HTTP/HTTPS; kiểm tra từ máy ngoài; Prometheus targets UP, dashboard Grafana và logs Loki |
@@ -304,4 +306,4 @@ python3 infrastructure/k6/run-load-test.py --rates 500 1000 --duration 30
 
 Demo bắt buộc: chạy runner Day 14, trình bày 10/490 và đối chiếu tồn; trình bày compensation; dừng/khôi phục Notification; mở dashboard/log theo orderId; truy cập domain HTTPS và trình bày lần deploy thành công. Runner tạo SKU/user riêng, giữ fixture để xem lại và tự khởi động lại Notification trong `finally` khi gặp lỗi; chỉ dùng trên môi trường demo không có khách hàng thật.
 
-Kết quả local đã ghi tại [biên bản Day 14](docs/day14-final-demo.md). Còn thiếu nghiệm thu VPS/HTTPS thật. [Kết quả tải sau tối ưu Day 13](docs/performance-optimization.md) vẫn chưa đạt mục tiêu p95/throughput. Product/Payment đã có JWT/RBAC và kiểm tra chủ payment; xem [hướng dẫn cập nhật và tài khoản ADMIN fixture](docs/security-and-cancellation.md). payOS đã có tạo link, webhook và reconciliation; hoàn tiền thật/chi hộ chưa tích hợp. Refresh endpoint, pagination, notification dedup và email thật chưa hoàn chỉnh; không xem toàn bộ SRS hay production readiness là đã đạt.
+Kết quả local lịch sử đã ghi tại [biên bản Day 14](docs/day14-final-demo.md); chưa chạy lại nghiệm thu tích hợp sau khi thêm SMTP. Còn thiếu nghiệm thu VPS/HTTPS và gửi email đến hộp thư thật. [Kết quả tải sau tối ưu Day 13](docs/performance-optimization.md) vẫn chưa đạt mục tiêu p95/throughput. Product/Payment đã có JWT/RBAC và kiểm tra chủ payment; xem [hướng dẫn cập nhật và tài khoản ADMIN fixture](docs/security-and-cancellation.md). payOS đã có tạo link, webhook và reconciliation; hoàn tiền thật/chi hộ chưa tích hợp. Refresh endpoint và pagination chưa hoàn chỉnh; không xem toàn bộ SRS hay production readiness là đã đạt.

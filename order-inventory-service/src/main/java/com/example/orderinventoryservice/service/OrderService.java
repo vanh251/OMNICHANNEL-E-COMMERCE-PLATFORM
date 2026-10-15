@@ -13,6 +13,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -20,6 +23,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Comparator;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -57,6 +61,7 @@ public class OrderService {
                 .orderCode(orderCode)
                 .status(OrderStatus.PENDING)
                 .shippingAddress(request.getShippingAddress())
+                .recipientEmail(userEmail.trim().toLowerCase(Locale.ROOT))
                 .note(request.getNote())
                 .totalAmount(BigDecimal.ZERO)
                 .build();
@@ -126,6 +131,12 @@ public class OrderService {
                 .build();
 
         eventPublisher.publishOrderCreatedEvent(event);
+        eventPublisher.publishOrderEmailRecipientEvent(java.util.Map.of(
+                "eventId", UUID.randomUUID().toString(),
+                "eventType", "OrderEmailRecipientRegisteredEvent",
+                "timestamp", java.time.Instant.now().toString(),
+                "data", java.util.Map.of("orderId", savedOrder.getId().toString(),
+                        "customerId", userId.toString(), "email", savedOrder.getRecipientEmail())));
 
         // Take SKU locks only after persisting the order and its Outbox event.
         // They remain in the same transaction: insufficient stock rolls everything back.
@@ -156,6 +167,60 @@ public class OrderService {
         return orderRepository.findByUserIdOrderByCreatedAtDesc(userId).stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public Page<AdminOrderSummaryResponse> getAdminOrders(String status, int page, int size) {
+        if (page < 0 || size < 1 || size > 100) {
+            throw new IllegalArgumentException("page must be >= 0 and size must be between 1 and 100");
+        }
+        PageRequest pageable = PageRequest.of(page, size,
+                Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")));
+        Page<Order> orders;
+        if (status == null || status.isBlank()) {
+            orders = orderRepository.findAll(pageable);
+        } else {
+            OrderStatus filter;
+            try {
+                filter = OrderStatus.valueOf(status.trim().toUpperCase(Locale.ROOT));
+            } catch (IllegalArgumentException exception) {
+                throw new IllegalArgumentException("Invalid order status: " + status);
+            }
+            orders = orderRepository.findByStatus(filter, pageable);
+        }
+        return orders.map(order -> new AdminOrderSummaryResponse(order.getId(), order.getOrderCode(),
+                order.getUserId(), order.getStatus().name(), order.getTotalAmount(), order.getCreatedAt()));
+    }
+
+    @Transactional(readOnly = true)
+    public OrderResponse getAdminOrderById(Long orderId) {
+        return mapToResponse(orderRepository.findById(orderId)
+                .orElseThrow(() -> new OrderNotFoundException("Order not found with id: " + orderId)));
+    }
+
+    @Transactional
+    public OrderResponse shipOrder(Long orderId, String adminEmail) {
+        Order order = orderRepository.findByIdForUpdate(orderId)
+                .orElseThrow(() -> new OrderNotFoundException("Order not found with id: " + orderId));
+        validateStatusTransition(order.getStatus(), OrderStatus.SHIPPING);
+        changeStatus(order, OrderStatus.SHIPPING, adminEmail);
+        orderRepository.save(order);
+        eventPublisher.publishOrderShippedEvent(statusEvent(order, "OrderShippedEvent"));
+        return mapToResponse(order);
+    }
+
+    @Transactional
+    public OrderResponse confirmReceipt(Long orderId, Long userId, String userEmail) {
+        Order order = orderRepository.findByIdForUpdate(orderId)
+                .orElseThrow(() -> new OrderNotFoundException("Order not found with id: " + orderId));
+        if (!order.getUserId().equals(userId)) {
+            throw new UnauthorizedOrderAccessException("You are not authorized to confirm receipt of this order");
+        }
+        validateStatusTransition(order.getStatus(), OrderStatus.COMPLETED);
+        changeStatus(order, OrderStatus.COMPLETED, userEmail);
+        orderRepository.save(order);
+        eventPublisher.publishOrderCompletedEvent(statusEvent(order, "OrderCompletedEvent"));
+        return mapToResponse(order);
     }
 
     @Transactional
@@ -232,13 +297,20 @@ public class OrderService {
                         "cancelledAt", java.time.Instant.now().toString()));
     }
 
+    private java.util.Map<String, Object> statusEvent(Order order, String eventType) {
+        return java.util.Map.of("eventId", UUID.randomUUID().toString(),
+                "eventType", eventType, "timestamp", java.time.Instant.now().toString(),
+                "data", java.util.Map.of("orderId", order.getId().toString(),
+                        "customerId", order.getUserId().toString()));
+    }
+
     // ==================== Helper Methods ====================
 
     private void validateStatusTransition(OrderStatus from, OrderStatus to) {
         String transition = from.name() + "->" + to.name();
         if (!VALID_TRANSITIONS.contains(transition)) {
             throw new InvalidOrderStatusException(
-                    "Order cannot be cancelled in current status: " + from.name());
+                    "Order cannot transition from " + from.name() + " to " + to.name());
         }
     }
 

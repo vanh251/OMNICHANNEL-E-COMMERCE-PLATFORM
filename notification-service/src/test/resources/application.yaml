@@ -3,3 +3,7 @@ spring:
     listener:
       simple:
         auto-startup: false
+
+email:
+  worker:
+    enabled: false

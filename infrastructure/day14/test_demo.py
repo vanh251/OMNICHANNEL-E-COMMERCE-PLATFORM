@@ -37,6 +37,25 @@ class AcceptanceChecksTest(unittest.TestCase):
         self.assertEqual({"successful": 1, "insufficientStock": 1, "unexpected": 6},
                          demo.classify_outcomes(outcomes, "TEST"))
 
+    def test_notification_checks_mailpit_subjects(self):
+        runner = object.__new__(demo.Demo)
+        runner.args = Mock(timeout=1)
+        runner.mail_subjects = Mock(return_value={"Đã nhận đơn hàng #42",
+                                                  "Thanh toán thành công cho đơn #42"})
+        self.assertEqual(["Đã nhận đơn hàng #42", "Thanh toán thành công cho đơn #42"],
+                         runner.notification({"id": 42}))
+
+    def test_verification_link_is_read_from_mailpit_message(self):
+        runner = object.__new__(demo.Demo)
+        runner.args = Mock()
+        runner.email = "fixture@example.test"
+        link = "http://localhost:8080/api/auth/verify-email?token=" + "a" * 43
+        with patch.object(demo, "mailpit", side_effect=[
+                {"messages": [{"ID": "mail-1", "Subject": "Xác minh địa chỉ email",
+                               "To": [{"Email": runner.email}]}]},
+                {"Text": "Xác minh: " + link}]):
+            self.assertEqual(link, runner.verification_url())
+
     def test_failure_demo_restarts_notification_when_order_fails(self):
         runner = object.__new__(demo.Demo)
         runner.args = Mock(timeout=1)

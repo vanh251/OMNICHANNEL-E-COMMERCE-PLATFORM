@@ -20,8 +20,20 @@ public class EventPublisher {
         save("order.created", event);
     }
 
+    public void publishOrderEmailRecipientEvent(Object event) {
+        save("notification.order.recipient", event);
+    }
+
     public void publishOrderCancelledEvent(Object event) {
         save("order.cancelled", event);
+    }
+
+    public void publishOrderShippedEvent(Object event) {
+        save("order.shipped", event);
+    }
+
+    public void publishOrderCompletedEvent(Object event) {
+        save("order.completed", event);
     }
 
     public void publishInventorySyncedEvent(Object event) {

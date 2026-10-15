@@ -11,6 +11,13 @@ spring:
     hibernate:
       ddl-auto: create-drop
     show-sql: false
+  rabbitmq:
+    listener:
+      simple:
+        auto-startup: false
+
+outbox:
+  enabled: false
 
 jwt:
   secret: vanhdzvcldiojfijsiodjfojsiodjfijnenjbtuututjdnjkfn

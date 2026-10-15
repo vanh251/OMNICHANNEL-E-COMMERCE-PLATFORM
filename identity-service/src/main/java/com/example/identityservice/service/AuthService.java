@@ -26,6 +26,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
+    private final EmailVerificationService emailVerificationService;
 
     @Transactional
     public UserResponse register(RegisterRequest request) {
@@ -46,6 +47,8 @@ public class AuthService {
                 .build();
 
         User savedUser = userRepository.save(user);
+
+        emailVerificationService.requestVerification(savedUser);
 
         return mapToUserResponse(savedUser);
     }
@@ -70,6 +73,7 @@ public class AuthService {
                 .userId(user.getId())
                 .email(user.getEmail())
                 .role(user.getRole().name())
+                .emailVerified(user.getEmailVerifiedAt() != null)
                 .build();
     }
 
@@ -82,6 +86,7 @@ public class AuthService {
                 .phone(user.getPhone())
                 .address(user.getAddress())
                 .role(user.getRole().name())
+                .emailVerified(user.getEmailVerifiedAt() != null)
                 .build();
     }
 }

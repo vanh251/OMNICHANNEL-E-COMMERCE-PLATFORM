@@ -1,12 +1,19 @@
 package com.example.orderinventoryservice.service;
 
+import com.example.orderinventoryservice.dto.InventoryResponse;
 import com.example.orderinventoryservice.entity.InventoryReservation;
 import com.example.orderinventoryservice.exception.InsufficientStockException;
+import com.example.orderinventoryservice.exception.InventoryNotFoundException;
+import com.example.orderinventoryservice.exception.InvalidStockAdjustmentException;
+import com.example.orderinventoryservice.mapper.InventoryMapper;
 import com.example.orderinventoryservice.repository.InventoryRepository;
 import com.example.orderinventoryservice.repository.InventoryReservationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -19,6 +26,44 @@ public class InventoryService {
 
     private final InventoryRepository inventoryRepository;
     private final InventoryReservationRepository inventoryReservationRepository;
+
+    @Transactional(readOnly = true)
+    public Page<InventoryResponse> getInventory(String productId, int page, int size) {
+        if (page < 0 || size < 1 || size > 100) {
+            throw new IllegalArgumentException("Page must be non-negative and size must be between 1 and 100");
+        }
+        PageRequest pageable = PageRequest.of(page, size, Sort.by("sku"));
+        return (productId == null || productId.isBlank()
+                ? inventoryRepository.findAll(pageable)
+                : inventoryRepository.findByProductId(productId.trim(), pageable))
+                .map(InventoryMapper::toResponse);
+    }
+
+    @Transactional(readOnly = true)
+    public InventoryResponse getInventoryBySku(String sku) {
+        return InventoryMapper.toResponse(inventoryRepository.findBySku(sku)
+                .orElseThrow(() -> new InventoryNotFoundException(sku)));
+    }
+
+    @Transactional
+    public InventoryResponse adjustStock(String sku, Integer quantityDelta, String changedBy) {
+        if (quantityDelta == null || quantityDelta == 0) {
+            throw new IllegalArgumentException("Quantity delta must be a non-zero integer");
+        }
+        // Bound before addition to avoid integer overflow and consuming reserved units.
+        long minimumAvailable = Math.max(0L, -(long) quantityDelta);
+        long maximumTotal = Integer.MAX_VALUE - Math.max(0L, (long) quantityDelta);
+        if (inventoryRepository.adjustStock(sku, quantityDelta, minimumAvailable, maximumTotal) != 1) {
+            if (inventoryRepository.findBySku(sku).isEmpty()) {
+                throw new InventoryNotFoundException(sku);
+            }
+            throw new InvalidStockAdjustmentException(sku);
+        }
+        InventoryResponse response = getInventoryBySku(sku);
+        log.info("Adjusted inventory sku={} quantityDelta={} changedBy={} totalStock={} availableStock={}",
+                sku, quantityDelta, changedBy, response.totalStock(), response.availableStock());
+        return response;
+    }
 
     @Transactional
     public void reserveStock(Long orderId, String sku, Integer quantity) {
