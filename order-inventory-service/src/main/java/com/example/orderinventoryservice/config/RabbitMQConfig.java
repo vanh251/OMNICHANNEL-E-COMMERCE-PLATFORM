@@ -93,6 +93,11 @@ public class RabbitMQConfig {
     }
 
     @Bean
+    public Binding orderRecipientNotificationBinding(@Qualifier("notificationQueue") Queue notificationQueue, TopicExchange ecommerceExchange) {
+        return BindingBuilder.bind(notificationQueue).to(ecommerceExchange).with("notification.order.recipient");
+    }
+
+    @Bean
     public Binding orderCancelledNotificationBinding(@Qualifier("notificationQueue") Queue notificationQueue, TopicExchange ecommerceExchange) {
         return BindingBuilder.bind(notificationQueue).to(ecommerceExchange).with("order.cancelled");
     }
