@@ -6,6 +6,7 @@ spring:
     name: notification-service
 
   rabbitmq:
+    publisher-confirm-type: simple
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USERNAME:admin}
@@ -17,6 +18,27 @@ spring:
   data:
     mongodb:
       uri: mongodb://${MONGO_ROOT_USERNAME:admin}:${MONGO_ROOT_PASSWORD:admin123}@${MONGO_HOST:localhost}:${MONGO_PORT:27017}/notification_db?authSource=admin
+      auto-index-creation: true
+
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      "[mail.smtp.auth]": ${MAIL_AUTH:false}
+      "[mail.smtp.starttls.enable]": ${MAIL_STARTTLS:false}
+      "[mail.smtp.starttls.required]": ${MAIL_STARTTLS_REQUIRED:false}
+      "[mail.smtp.ssl.enable]": ${MAIL_SSL_ENABLE:false}
+      "[mail.smtp.connectiontimeout]": 5000
+      "[mail.smtp.timeout]": 5000
+      "[mail.smtp.writetimeout]": 5000
+
+email:
+  from: ${MAIL_FROM:no-reply@example.test}
+  worker:
+    enabled: ${EMAIL_WORKER_ENABLED:true}
+    poll-ms: ${EMAIL_WORKER_POLL_MS:1000}
 
 management:
   metrics:

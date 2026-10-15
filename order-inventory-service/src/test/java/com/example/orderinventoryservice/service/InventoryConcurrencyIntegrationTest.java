@@ -211,7 +211,7 @@ public class InventoryConcurrencyIntegrationTest {
             }
             assertThat(codes).hasSize(20).doesNotHaveDuplicates();
             assertThat(orderRepository.count()).isEqualTo(20);
-            assertThat(outboxRepository.count()).isEqualTo(20);
+            assertThat(outboxRepository.count()).isEqualTo(40);
             assertThat(reservationRepository.count()).isEqualTo(40);
             assertThat(inventoryRepository.findAll()).allSatisfy(stock -> {
                 assertThat(stock.getAvailableStock()).isZero();

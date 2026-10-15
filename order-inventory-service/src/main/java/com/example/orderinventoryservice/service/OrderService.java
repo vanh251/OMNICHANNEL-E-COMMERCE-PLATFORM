@@ -61,6 +61,7 @@ public class OrderService {
                 .orderCode(orderCode)
                 .status(OrderStatus.PENDING)
                 .shippingAddress(request.getShippingAddress())
+                .recipientEmail(userEmail.trim().toLowerCase(Locale.ROOT))
                 .note(request.getNote())
                 .totalAmount(BigDecimal.ZERO)
                 .build();
@@ -130,6 +131,12 @@ public class OrderService {
                 .build();
 
         eventPublisher.publishOrderCreatedEvent(event);
+        eventPublisher.publishOrderEmailRecipientEvent(java.util.Map.of(
+                "eventId", UUID.randomUUID().toString(),
+                "eventType", "OrderEmailRecipientRegisteredEvent",
+                "timestamp", java.time.Instant.now().toString(),
+                "data", java.util.Map.of("orderId", savedOrder.getId().toString(),
+                        "customerId", userId.toString(), "email", savedOrder.getRecipientEmail())));
 
         // Take SKU locks only after persisting the order and its Outbox event.
         // They remain in the same transaction: insufficient stock rolls everything back.

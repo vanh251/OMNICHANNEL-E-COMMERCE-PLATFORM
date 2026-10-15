@@ -20,6 +20,10 @@ public class EventPublisher {
         save("order.created", event);
     }
 
+    public void publishOrderEmailRecipientEvent(Object event) {
+        save("notification.order.recipient", event);
+    }
+
     public void publishOrderCancelledEvent(Object event) {
         save("order.cancelled", event);
     }

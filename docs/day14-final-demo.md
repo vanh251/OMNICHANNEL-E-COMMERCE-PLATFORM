@@ -1,5 +1,7 @@
 # Day 14 — kiểm thử tích hợp và final demo
 
+**Lưu ý cho phiên bản hiện tại:** runner xác minh email fixture và kiểm tra thư đơn hàng trong Mailpit `http://127.0.0.1:8025`, thay cho marker trong log Notification. Các kết quả đo lịch sử bên dưới được thực hiện trước thay đổi này và không chứng minh SMTP mới. Xem [hướng dẫn email](email-delivery.md).
+
 ## Cách chạy lại
 
 Từ thư mục gốc, Docker Compose đang healthy và Python 3.10+. Bản hiện tại yêu cầu tài khoản ADMIN fixture qua FIXTURE_ADMIN_EMAIL/FIXTURE_ADMIN_PASSWORD; chuẩn bị theo [hướng dẫn bảo mật](security-and-cancellation.md).

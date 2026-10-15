@@ -54,6 +54,11 @@ def api(args, method, path, body=None, token=None, expected=200):
     return data
 
 
+def mailpit(args, path):
+    with urllib.request.urlopen(args.mailpit_url.rstrip("/") + path, timeout=15) as response:
+        return json.load(response)
+
+
 def eventually(probe, predicate, timeout, description):
     deadline = time.monotonic() + timeout
     while True:
@@ -75,6 +80,7 @@ class Demo:
         self.database = self.config["order-inventory-service"]["environment"]["ORDER_DB"]
         self.token = None
         self.admin_token = None
+        self.email = None
 
     def compose(self, *arguments):
         return load_test.run_command(load_test.compose_command(self.args) + list(arguments), timeout=180)
@@ -123,17 +129,35 @@ class Demo:
 
     def notification(self, order, failed=False):
         order_id = order["id"]
-        markers = [f"Your order #{order_id} has been created."]
+        markers = [f"Đã nhận đơn hàng #{order_id}"]
         if failed:
-            markers += [f"Payment failed for order #{order_id}.",
-                        f"Your order #{order_id} has been cancelled."]
+            markers += [f"Thanh toán thất bại cho đơn #{order_id}",
+                        f"Đơn hàng #{order_id} đã hủy"]
         else:
-            markers += [f"Payment succeeded for order #{order_id}."]
-        eventually(lambda: self.compose("logs", "--no-color", "--since", self.started,
-                                        "notification-service"),
-                   lambda logs: all(marker in logs for marker in markers), self.args.timeout,
-                   f"notification log markers for order {order_id}")
+            markers += [f"Thanh toán thành công cho đơn #{order_id}"]
+        eventually(lambda: self.mail_subjects(),
+                   lambda subjects: all(marker in subjects for marker in markers), self.args.timeout,
+                   f"Mailpit messages for order {order_id}")
         return markers
+
+    def mail_subjects(self):
+        listing = mailpit(self.args, "/api/v1/messages?limit=1000")
+        return {message["Subject"] for message in listing["messages"]
+                if any(address["Email"].lower() == self.email for address in message["To"])}
+
+    def verification_url(self):
+        listing = mailpit(self.args, "/api/v1/messages?limit=1000")
+        for message in listing["messages"]:
+            if not any(address["Email"].lower() == self.email for address in message["To"]):
+                continue
+            if message["Subject"] != "Xác minh địa chỉ email":
+                continue
+            detail = mailpit(self.args, "/api/v1/message/" + urllib.parse.quote(message["ID"], safe=""))
+            match = re.search(r"https?://[^\s<>\"']+/api/auth/verify-email\?token=[A-Za-z0-9_-]+",
+                              detail.get("Text", ""))
+            if match:
+                return match.group(0)
+        return None
 
     def queue(self):
         vhost = self.config["rabbitmq"]["environment"]["RABBITMQ_DEFAULT_VHOST"]
@@ -152,8 +176,22 @@ class Demo:
         }, expected=201)
         auth = api(self.args, "POST", "/api/auth/login", {"email": email, "password": password})
         self.token = auth["accessToken"]
+        self.email = email
         me = api(self.args, "GET", "/api/users/me", token=self.token)
         require(me["email"] == email, "JWT did not identify the fixture user")
+        require(not me["emailVerified"], "New account should start unverified")
+        link = eventually(self.verification_url, bool, self.args.timeout,
+                          "verification email in Mailpit")
+        parsed = urllib.parse.urlparse(link)
+        require(parsed.hostname in ("localhost", "127.0.0.1", "::1")
+                and parsed.path == "/api/auth/verify-email"
+                and parsed.port == urllib.parse.urlparse(self.args.base_url).port,
+                "Verification link points outside the local Gateway")
+        with urllib.request.urlopen(link, timeout=15) as response:
+            require(response.status == 200, "Email verification failed")
+        eventually(lambda: api(self.args, "GET", "/api/users/me", token=self.token),
+                   lambda user: user["emailVerified"], self.args.timeout,
+                   "fixture email verification")
 
     def end_to_end(self, failed=False):
         fixture = self.fixture("compensation" if failed else "e2e", price=10001 if failed else 1000)
@@ -206,7 +244,7 @@ class Demo:
             final = self.settle(order)
             payment = api(self.args, "GET", f"/api/payments/{order['id']}", token=self.token)
             require(payment["status"] == "SUCCESS", "Payment failed while Notification was down")
-            backlog = eventually(self.queue, lambda q: q["messages_ready"] >= 2,
+            backlog = eventually(self.queue, lambda q: q["messages_ready"] >= 3,
                                  self.args.timeout, "durable notifications queued during outage")
             stock = self.stock(fixture, 1, 1)
         finally:
@@ -238,12 +276,15 @@ def main():
     parser.add_argument("--compose-file", default="docker-compose.yml")
     parser.add_argument("--env-file", default=".env")
     parser.add_argument("--base-url", default="http://localhost:8080")
+    parser.add_argument("--mailpit-url", default="http://127.0.0.1:8025")
     parser.add_argument("--timeout", type=int, default=120)
     args = parser.parse_args()
     if args.timeout <= 0:
         parser.error("--timeout must be positive")
     require(urllib.parse.urlparse(args.base_url).hostname in ("localhost", "127.0.0.1", "::1"),
             "Run on the target Docker host using a loopback Gateway URL")
+    require(urllib.parse.urlparse(args.mailpit_url).hostname in ("localhost", "127.0.0.1", "::1"),
+            "Run on the target Docker host using a loopback Mailpit URL")
     demo = Demo(args)
     report = {"runId": demo.run_id, "measuredAt": demo.started, "passed": False, "scenarios": {}}
     RESULTS.mkdir(parents=True, exist_ok=True)

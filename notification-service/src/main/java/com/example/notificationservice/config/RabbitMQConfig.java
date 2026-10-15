@@ -62,6 +62,29 @@ public class RabbitMQConfig {
     }
 
     @Bean
+    public Binding orderRecipientBinding(Queue notificationQueue, TopicExchange ecommerceExchange) {
+        return BindingBuilder.bind(notificationQueue).to(ecommerceExchange).with("notification.order.recipient");
+    }
+
+    @Bean
+    public Binding verificationRequestedBinding(Queue notificationQueue, TopicExchange ecommerceExchange) {
+        return BindingBuilder.bind(notificationQueue).to(ecommerceExchange).with("identity.email.verification.requested");
+    }
+
+    @Bean
+    public Binding emailVerifiedBinding(Queue notificationQueue, TopicExchange ecommerceExchange) {
+        return BindingBuilder.bind(notificationQueue).to(ecommerceExchange).with("identity.email.verified");
+    }
+
+    @Bean
+    public Queue notificationDeadQueue() { return new Queue("notification.dead.queue", true); }
+
+    @Bean
+    public Binding notificationDeadBinding(Queue notificationDeadQueue, TopicExchange ecommerceExchange) {
+        return BindingBuilder.bind(notificationDeadQueue).to(ecommerceExchange).with("notification.dead");
+    }
+
+    @Bean
     public MessageConverter jsonMessageConverter() {
         return new Jackson2JsonMessageConverter();
     }

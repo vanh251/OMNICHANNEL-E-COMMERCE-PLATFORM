@@ -48,6 +48,8 @@ chmod 600 .env
 
 Chỉ copy `.env` khi chưa có. Thay toàn bộ password mẫu của PostgreSQL, MongoDB, Redis, RabbitMQ, Grafana và `JWT_SECRET`; có thể tạo từng secret bằng `openssl rand -hex 32`. Không đưa secret vào git/log/chat. MongoDB URI hiện ghép password trực tiếp, nên dùng chuỗi hex để không phải xử lý ký tự URI đặc biệt.
 
+Điền `EMAIL_VERIFICATION_BASE_URL` bằng URL Gateway HTTPS công khai và `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM` bằng tài khoản SMTP thật trước khi chạy Compose production. Cấu hình domain gửi và thử nhận thư theo [hướng dẫn email](email-delivery.md). Compose production từ chối các biến bắt buộc còn trống.
+
 Giữ hostname nội bộ `postgres`, `mongodb`, `redis`, `rabbitmq` và cổng nội bộ mặc định. Giữ `IDENTITY_DB=identity_db`, `ORDER_DB=order_db`, `PAYMENT_DB=payment_db`: init SQL hiện tạo các tên này. Nếu đổi tên DB, cần cập nhật quy trình tạo DB tương ứng trước khi chạy. Init SQL chỉ chạy lần đầu trên volume rỗng; chỉnh `.env` không đổi credential của dữ liệu đã tồn tại.
 
 Thêm vào `.env` (owner GHCR viết thường):
