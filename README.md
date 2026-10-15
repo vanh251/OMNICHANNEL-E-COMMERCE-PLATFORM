@@ -67,7 +67,7 @@ flowchart LR
 - **gRPC (HTTP/2, Protocol Buffers):** Order gọi `ProductGrpcService.VerifyProductDetails` để lấy SKU, tên và giá. Contract ở [product.proto](product-service/src/main/proto/product.proto); latency phải đo thực tế, không mặc định đạt dưới 5 ms.
 - **Event-driven queue (RabbitMQ):** publisher đưa event từ Outbox vào topic exchange `ecommerce.exchange`; các queue `payment.queue`, `order.queue`, `notification.queue` tách công việc của từng consumer. Retry/phát lại đòi hỏi xử lý idempotent, xác nhận message và theo dõi backlog.
 
-Service chỉ truy cập DB của mình. PostgreSQL có thể dùng chung một container cho demo nhưng các database tách biệt. Redis có trong stack; giữ tồn hiện được bảo vệ bằng **SQL UPDATE có điều kiện trong transaction PostgreSQL**, không dùng Redis lock. Dữ liệu tồn có thẩm quyền nằm ở Order; trường `stock` của catalog không thay thế kiểm tra tồn khi đặt hàng.
+Service chỉ truy cập DB của mình. PostgreSQL có thể dùng chung một container cho demo nhưng các database tách biệt. Redis có trong stack; giữ tồn hiện được bảo vệ bằng **SQL UPDATE có điều kiện trong transaction PostgreSQL**, không dùng Redis lock. Dữ liệu tồn có thẩm quyền nằm ở Order; trường `stock` của catalog chỉ là tồn ban đầu, không thay thế kiểm tra tồn khi đặt hàng. ADMIN xem tồn qua `GET /api/inventory` hoặc `GET /api/inventory/{sku}`, nhập/giảm tồn bằng `POST /api/inventory/{sku}/adjustments` với `quantityDelta` có dấu. Khi sửa thông tin SKU đã có bằng PUT product, có thể bỏ qua `stock`. Xem [hợp đồng và ví dụ API](docs/api-runtime.md).
 
 ```mermaid
 sequenceDiagram
