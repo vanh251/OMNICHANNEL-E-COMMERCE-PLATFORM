@@ -40,6 +40,11 @@
       "key": "categoryId",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "inventorySku",
+      "value": "DEMO-PAYOS-2K",
+      "type": "string"
     }
   ],
   "item": [
@@ -401,6 +406,130 @@
             },
             "description": "Lay danh sach san pham theo Category."
           }
+        }
+      ]
+    },
+    {
+      "name": "02b. Inventory [ADMIN]",
+      "description": "Current stock belongs to Order & Inventory Service. Use an ADMIN token and a SKU already synced from catalog. Each successful adjustment is applied once per request; do not retry automatically.",
+      "auth": {
+        "type": "bearer",
+        "bearer": [{"key": "token", "value": "{{adminToken}}", "type": "string"}]
+      },
+      "item": [
+        {
+          "name": "List Inventory [ADMIN]",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/inventory?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "inventory"],
+              "query": [
+                {"key": "page", "value": "0"},
+                {"key": "size", "value": "20"},
+                {"key": "productId", "value": "{{productId}}", "disabled": true}
+              ]
+            },
+            "description": "Page of inventory sorted by SKU ascending. Enable productId to filter. Page starts at 0; size is 1 to 100."
+          },
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
+            "pm.test('Inventory page is returned', function () {",
+            "  pm.response.to.have.status(200);",
+            "  const page = pm.response.json();",
+            "  pm.expect(page.content).to.be.an('array');",
+            "  pm.expect(page.size).to.eql(20);",
+            "  page.content.forEach(function (stock) {",
+            "    pm.expect(stock.totalStock).to.eql(stock.reservedStock + stock.availableStock);",
+            "    pm.expect(stock.availableStock).to.be.at.least(0);",
+            "    pm.expect(stock.reservedStock).to.be.at.least(0);",
+            "  });",
+            "});"
+          ]}}]
+        },
+        {
+          "name": "Get Current Inventory by SKU [ADMIN]",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/inventory/{{inventorySku}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "inventory", "{{inventorySku}}"]
+            },
+            "description": "Authoritative current quantities, independent of catalog variants.stock. A SKU that has not been initialized returns 404."
+          },
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
+            "pm.test('Current quantities satisfy the stock invariant', function () {",
+            "  pm.response.to.have.status(200);",
+            "  const stock = pm.response.json();",
+            "  pm.expect(stock.sku).to.eql(pm.collectionVariables.get('inventorySku'));",
+            "  pm.expect(stock.totalStock).to.eql(stock.reservedStock + stock.availableStock);",
+            "  pm.expect(stock.availableStock).to.be.at.least(0);",
+            "  pm.expect(stock.reservedStock).to.be.at.least(0);",
+            "});"
+          ]}}]
+        },
+        {
+          "name": "Adjust Inventory [ADMIN]",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"quantityDelta\": 20\n}", "options": {"raw": {"language": "json"}}},
+            "url": {
+              "raw": "{{baseUrl}}/api/inventory/{{inventorySku}}/adjustments",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "inventory", "{{inventorySku}}", "adjustments"]
+            },
+            "description": "Adds 20 units to total and available stock. Use a negative quantityDelta to remove available units. Reserved units are preserved. This request changes inventory on every successful execution. Invalid zero/missing delta returns 400; unknown SKU returns 404; insufficient availability or integer overflow returns 409."
+          },
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
+            "pm.test('Adjustment returns valid inventory', function () {",
+            "  pm.response.to.have.status(200);",
+            "  const stock = pm.response.json();",
+            "  pm.expect(stock.sku).to.eql(pm.collectionVariables.get('inventorySku'));",
+            "  pm.expect(stock.totalStock).to.eql(stock.reservedStock + stock.availableStock);",
+            "  pm.expect(stock.availableStock).to.be.at.least(0);",
+            "  pm.expect(stock.reservedStock).to.be.at.least(0);",
+            "});"
+          ]}}]
+        },
+        {
+          "name": "Reject Zero Inventory Adjustment [ADMIN]",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"quantityDelta\": 0\n}", "options": {"raw": {"language": "json"}}},
+            "url": {
+              "raw": "{{baseUrl}}/api/inventory/{{inventorySku}}/adjustments",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "inventory", "{{inventorySku}}", "adjustments"]
+            }
+          },
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
+            "pm.test('Zero delta is rejected', function () {",
+            "  pm.response.to.have.status(400);",
+            "  pm.expect(pm.response.json().message).to.include('non-zero');",
+            "});"
+          ]}}]
+        },
+        {
+          "name": "Reject Removal Beyond Integer Stock [ADMIN]",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"quantityDelta\": -2147483648\n}", "options": {"raw": {"language": "json"}}},
+            "url": {
+              "raw": "{{baseUrl}}/api/inventory/{{inventorySku}}/adjustments",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "inventory", "{{inventorySku}}", "adjustments"]
+            }
+          },
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
+            "pm.test('Impossible removal is rejected', function () {",
+            "  pm.response.to.have.status(409);",
+            "  pm.expect(pm.response.json().message).to.include('available stock');",
+            "});"
+          ]}}]
         }
       ]
     },
