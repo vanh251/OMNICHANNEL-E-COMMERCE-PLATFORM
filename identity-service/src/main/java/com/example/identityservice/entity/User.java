@@ -2,6 +2,7 @@ package com.example.identityservice.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "users")
@@ -24,6 +25,9 @@ public class User {
 
     @Column(nullable = false, unique = true)
     private String email;
+
+    // Null for existing and newly registered accounts until the address is verified.
+    private LocalDateTime emailVerifiedAt;
 
     @Column(nullable = false)
     private String password;
