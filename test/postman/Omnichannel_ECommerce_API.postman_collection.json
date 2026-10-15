@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "8e3b5671-a4ef-4e31-897b-b8f886f37ad0",
     "name": "Omnichannel E-Commerce API (DuckDNS Production)",
-    "description": "Collection Postman goi toan bo API cua Omnichannel E-Commerce Platform tro toi domain https://api-vanhdz.duckdns.org\nBao gom: Auth, Profile, Admin, Categories, Products, Orders, Payments (Mock & PayOS) va Actuator Health.",
+    "description": "Collection Postman goi toan bo API cua Omnichannel E-Commerce Platform.\nBao gom: Auth (co xac minh email), Profile, Categories, Products, Inventory Management (SKU & Stock adjustments), Orders & Fulfillment (Ship, Confirm receipt), Payments (Mock & PayOS) va Actuator Health/Metrics.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -45,6 +45,31 @@
       "key": "inventorySku",
       "value": "DEMO-PAYOS-2K",
       "type": "string"
+    },
+    {
+      "key": "adminEmail",
+      "value": "admin@example.test",
+      "type": "string"
+    },
+    {
+      "key": "adminPassword",
+      "value": "Password123!",
+      "type": "string"
+    },
+    {
+      "key": "userEmail",
+      "value": "customer@example.test",
+      "type": "string"
+    },
+    {
+      "key": "userPassword",
+      "value": "Password123!",
+      "type": "string"
+    },
+    {
+      "key": "verificationToken",
+      "value": "",
+      "type": "string"
     }
   ],
   "item": [
@@ -63,7 +88,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"firstName\": \"Nguyen\",\n  \"lastName\": \"Van A\",\n  \"email\": \"customer@example.test\",\n  \"password\": \"Password123!\",\n  \"phone\": \"0987654321\",\n  \"address\": \"123 Cau Giay, Hanoi\"\n}"
+              "raw": "{\n  \"firstName\": \"Nguyen\",\n  \"lastName\": \"Van A\",\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"{{userPassword}}\",\n  \"phone\": \"0987654321\",\n  \"address\": \"123 Cau Giay, Hanoi\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/register",
@@ -76,8 +101,101 @@
                 "register"
               ]
             },
-            "description": "Dang ky tai khoan khach hang moi (mac dinh role USER)"
-          }
+            "description": "Dang ky tai khoan khach hang moi (mac dinh role USER, emailVerified=false)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var data = pm.response.json();",
+                  "    pm.test(\"User registered with emailVerified = false\", function () {",
+                  "        pm.expect(data.emailVerified).to.eql(false);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resend Verification Email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/resend-verification",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "resend-verification"
+              ]
+            },
+            "description": "Yeu cau gui lai lien ket xac minh email cho tai khoan dang dang nhap (Bearer JWT). Gioi han: 1 lan/phut va toi da 5 lan/ngay. Tra ve 202 Accepted hoac 429 Too Many Requests."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 202 or 429\", function () {",
+                  "    pm.expect([202, 429]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify Email (One-time link)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/verify-email?token={{verificationToken}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "verify-email"
+              ],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "{{verificationToken}}"
+                }
+              ]
+            },
+            "description": "Xac minh email bang link mot lan (24h) tu email gui den. Tra ve 200 kem trang HTML thong bao thanh cong hoac 400 neu link khong hop le / da het han."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 or 400\", function () {",
+                  "    pm.expect([200, 400]).to.include(pm.response.code);",
+                  "    if (pm.response.code === 200) {",
+                  "        pm.expect(pm.response.text()).to.include(\"xac minh\");",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Login User (Customer)",
@@ -108,7 +226,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"customer@example.test\",\n  \"password\": \"Password123!\"\n}"
+              "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"{{userPassword}}\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/login",
@@ -153,7 +271,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"usera@example.test\",\n  \"password\": \"Password123!\"\n}"
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/login",
@@ -191,7 +309,23 @@
               ]
             },
             "description": "Lay thong tin profile nguoi dung hien tai tu token JWT."
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var data = pm.response.json();",
+                  "    pm.test(\"Profile contains emailVerified\", function () {",
+                  "        pm.expect(data).to.have.property(\"emailVerified\");",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Test Admin Access",
@@ -406,6 +540,174 @@
             },
             "description": "Lay danh sach san pham theo Category."
           }
+        },
+        {
+          "name": "Update Category [ADMIN]",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Dien thoai & Thiet bi thong minh\",\n  \"description\": \"Cap nhat danh muc san pham cong nghe thong minh\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/categories/{{categoryId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "categories",
+                "{{categoryId}}"
+              ]
+            },
+            "description": "Cap nhat thong tin danh muc theo categoryId (Yeu cau ADMIN)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var data = pm.response.json();",
+                  "    pm.expect(data.id).to.eql(pm.collectionVariables.get(\"categoryId\"));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Product [ADMIN]",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"San pham Demo VietQR (Da cap nhat)\",\n  \"description\": \"Mo ta san pham cap nhat moi nhat\",\n  \"brand\": \"DemoBrand Pro\",\n  \"categoryId\": \"{{categoryId}}\",\n  \"variants\": [\n    {\n      \"sku\": \"{{inventorySku}}\",\n      \"name\": \"Ban Thu Nghiem Premium\",\n      \"price\": 2500,\n      \"oldPrice\": 3000\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/products/{{productId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "products",
+                "{{productId}}"
+              ]
+            },
+            "description": "Cap nhat san pham va bien the (Yeu cau ADMIN). Luu y: Tu phien ban moi, ton kho do Inventory Service quan ly, request PUT co the bo qua truong stock cua SKU da co; neu gui stock khac voi stock ban dau cua catalog se bi tu choi 400."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var data = pm.response.json();",
+                  "    pm.expect(data.id).to.eql(pm.collectionVariables.get(\"productId\"));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Product [ADMIN]",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/products/{{productId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "products",
+                "{{productId}}"
+              ]
+            },
+            "description": "Xoa san pham theo productId (Yeu cau ADMIN, tra ve 204 No Content)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 204\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Category [ADMIN]",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/categories/{{categoryId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "categories",
+                "{{categoryId}}"
+              ]
+            },
+            "description": "Xoa danh muc theo categoryId (Yeu cau ADMIN, tra ve 204 No Content)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 204\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -414,7 +716,13 @@
       "description": "Current stock belongs to Order & Inventory Service. Use an ADMIN token and a SKU already synced from catalog. Each successful adjustment is applied once per request; do not retry automatically.",
       "auth": {
         "type": "bearer",
-        "bearer": [{"key": "token", "value": "{{adminToken}}", "type": "string"}]
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{adminToken}}",
+            "type": "string"
+          }
+        ]
       },
       "item": [
         {
@@ -423,29 +731,98 @@
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/api/inventory?page=0&size=20",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "inventory"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "inventory"
+              ],
               "query": [
-                {"key": "page", "value": "0"},
-                {"key": "size", "value": "20"},
-                {"key": "productId", "value": "{{productId}}", "disabled": true}
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "20"
+                },
+                {
+                  "key": "productId",
+                  "value": "{{productId}}",
+                  "disabled": true
+                }
               ]
             },
             "description": "Page of inventory sorted by SKU ascending. Enable productId to filter. Page starts at 0; size is 1 to 100."
           },
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
-            "pm.test('Inventory page is returned', function () {",
-            "  pm.response.to.have.status(200);",
-            "  const page = pm.response.json();",
-            "  pm.expect(page.content).to.be.an('array');",
-            "  pm.expect(page.size).to.eql(20);",
-            "  page.content.forEach(function (stock) {",
-            "    pm.expect(stock.totalStock).to.eql(stock.reservedStock + stock.availableStock);",
-            "    pm.expect(stock.availableStock).to.be.at.least(0);",
-            "    pm.expect(stock.reservedStock).to.be.at.least(0);",
-            "  });",
-            "});"
-          ]}}]
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Inventory page is returned', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const page = pm.response.json();",
+                  "  pm.expect(page.content).to.be.an('array');",
+                  "  pm.expect(page.size).to.eql(20);",
+                  "  page.content.forEach(function (stock) {",
+                  "    pm.expect(stock.totalStock).to.eql(stock.reservedStock + stock.availableStock);",
+                  "    pm.expect(stock.availableStock).to.be.at.least(0);",
+                  "    pm.expect(stock.reservedStock).to.be.at.least(0);",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Filter Inventory by Product ID [ADMIN]",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/inventory?productId={{productId}}&page=0&size=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "inventory"
+              ],
+              "query": [
+                {
+                  "key": "productId",
+                  "value": "{{productId}}"
+                },
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Loc danh sach ton kho theo ma productId cua san pham catalog."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Filtered inventory page is returned\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const page = pm.response.json();",
+                  "  pm.expect(page.content).to.be.an(\"array\");",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Get Current Inventory by SKU [ADMIN]",
@@ -453,83 +830,181 @@
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/api/inventory/{{inventorySku}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "inventory", "{{inventorySku}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "inventory",
+                "{{inventorySku}}"
+              ]
             },
             "description": "Authoritative current quantities, independent of catalog variants.stock. A SKU that has not been initialized returns 404."
           },
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
-            "pm.test('Current quantities satisfy the stock invariant', function () {",
-            "  pm.response.to.have.status(200);",
-            "  const stock = pm.response.json();",
-            "  pm.expect(stock.sku).to.eql(pm.collectionVariables.get('inventorySku'));",
-            "  pm.expect(stock.totalStock).to.eql(stock.reservedStock + stock.availableStock);",
-            "  pm.expect(stock.availableStock).to.be.at.least(0);",
-            "  pm.expect(stock.reservedStock).to.be.at.least(0);",
-            "});"
-          ]}}]
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Current quantities satisfy the stock invariant', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const stock = pm.response.json();",
+                  "  pm.expect(stock.sku).to.eql(pm.collectionVariables.get('inventorySku'));",
+                  "  pm.expect(stock.totalStock).to.eql(stock.reservedStock + stock.availableStock);",
+                  "  pm.expect(stock.availableStock).to.be.at.least(0);",
+                  "  pm.expect(stock.reservedStock).to.be.at.least(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Adjust Inventory [ADMIN]",
           "request": {
             "method": "POST",
-            "header": [{"key": "Content-Type", "value": "application/json"}],
-            "body": {"mode": "raw", "raw": "{\n  \"quantityDelta\": 20\n}", "options": {"raw": {"language": "json"}}},
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantityDelta\": 20\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
             "url": {
               "raw": "{{baseUrl}}/api/inventory/{{inventorySku}}/adjustments",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "inventory", "{{inventorySku}}", "adjustments"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "inventory",
+                "{{inventorySku}}",
+                "adjustments"
+              ]
             },
             "description": "Adds 20 units to total and available stock. Use a negative quantityDelta to remove available units. Reserved units are preserved. This request changes inventory on every successful execution. Invalid zero/missing delta returns 400; unknown SKU returns 404; insufficient availability or integer overflow returns 409."
           },
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
-            "pm.test('Adjustment returns valid inventory', function () {",
-            "  pm.response.to.have.status(200);",
-            "  const stock = pm.response.json();",
-            "  pm.expect(stock.sku).to.eql(pm.collectionVariables.get('inventorySku'));",
-            "  pm.expect(stock.totalStock).to.eql(stock.reservedStock + stock.availableStock);",
-            "  pm.expect(stock.availableStock).to.be.at.least(0);",
-            "  pm.expect(stock.reservedStock).to.be.at.least(0);",
-            "});"
-          ]}}]
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Adjustment returns valid inventory', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const stock = pm.response.json();",
+                  "  pm.expect(stock.sku).to.eql(pm.collectionVariables.get('inventorySku'));",
+                  "  pm.expect(stock.totalStock).to.eql(stock.reservedStock + stock.availableStock);",
+                  "  pm.expect(stock.availableStock).to.be.at.least(0);",
+                  "  pm.expect(stock.reservedStock).to.be.at.least(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Reject Zero Inventory Adjustment [ADMIN]",
           "request": {
             "method": "POST",
-            "header": [{"key": "Content-Type", "value": "application/json"}],
-            "body": {"mode": "raw", "raw": "{\n  \"quantityDelta\": 0\n}", "options": {"raw": {"language": "json"}}},
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantityDelta\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
             "url": {
               "raw": "{{baseUrl}}/api/inventory/{{inventorySku}}/adjustments",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "inventory", "{{inventorySku}}", "adjustments"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "inventory",
+                "{{inventorySku}}",
+                "adjustments"
+              ]
             }
           },
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
-            "pm.test('Zero delta is rejected', function () {",
-            "  pm.response.to.have.status(400);",
-            "  pm.expect(pm.response.json().message).to.include('non-zero');",
-            "});"
-          ]}}]
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Zero delta is rejected', function () {",
+                  "  pm.response.to.have.status(400);",
+                  "  pm.expect(pm.response.json().message).to.include('non-zero');",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Reject Removal Beyond Integer Stock [ADMIN]",
           "request": {
             "method": "POST",
-            "header": [{"key": "Content-Type", "value": "application/json"}],
-            "body": {"mode": "raw", "raw": "{\n  \"quantityDelta\": -2147483648\n}", "options": {"raw": {"language": "json"}}},
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantityDelta\": -2147483648\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
             "url": {
               "raw": "{{baseUrl}}/api/inventory/{{inventorySku}}/adjustments",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "inventory", "{{inventorySku}}", "adjustments"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "inventory",
+                "{{inventorySku}}",
+                "adjustments"
+              ]
             }
           },
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
-            "pm.test('Impossible removal is rejected', function () {",
-            "  pm.response.to.have.status(409);",
-            "  pm.expect(pm.response.json().message).to.include('available stock');",
-            "});"
-          ]}}]
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Impossible removal is rejected', function () {",
+                  "  pm.response.to.have.status(409);",
+                  "  pm.expect(pm.response.json().message).to.include('available stock');",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -661,15 +1136,35 @@
           "name": "Admin List Orders (Loc trang thai)",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/api/orders/admin?status=CONFIRMED&page=0&size=20",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "orders", "admin"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders",
+                "admin"
+              ],
               "query": [
-                { "key": "status", "value": "CONFIRMED" },
-                { "key": "page", "value": "0" },
-                { "key": "size", "value": "20" }
+                {
+                  "key": "status",
+                  "value": "CONFIRMED"
+                },
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "20"
+                }
               ]
             },
             "description": "ADMIN xem don hang phan trang, co the bo status de xem tat ca."
@@ -679,11 +1174,23 @@
           "name": "Admin Get Order by ID",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/api/orders/admin/{{orderId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "orders", "admin", "{{orderId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders",
+                "admin",
+                "{{orderId}}"
+              ]
             },
             "description": "ADMIN xem chi tiet don hang bat ky."
           }
@@ -692,11 +1199,23 @@
           "name": "Admin Start Shipping",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/api/orders/{{orderId}}/ship",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "orders", "{{orderId}}", "ship"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders",
+                "{{orderId}}",
+                "ship"
+              ]
             },
             "description": "ADMIN chuyen CONFIRMED sang SHIPPING; goi lap lai tra 409."
           }
@@ -705,11 +1224,23 @@
           "name": "Customer Confirm Receipt",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/api/orders/{{orderId}}/confirm-receipt",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "orders", "{{orderId}}", "confirm-receipt"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders",
+                "{{orderId}}",
+                "confirm-receipt"
+              ]
             },
             "description": "Chu don xac nhan da nhan hang, chuyen SHIPPING sang COMPLETED; goi lap lai tra 409."
           }
@@ -895,6 +1426,36 @@
             },
             "description": "Kiem tra suc khoe tong quan cua he thong va API Gateway qua Spring Boot Actuator."
           }
+        },
+        {
+          "name": "Actuator Prometheus Metrics",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/actuator/prometheus",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "prometheus"
+              ]
+            },
+            "description": "Xem cac metric Prometheus cua Gateway va cac service (HTTP requests, JVM, percentiles)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     }
