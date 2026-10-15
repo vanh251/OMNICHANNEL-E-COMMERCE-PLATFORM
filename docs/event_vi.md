@@ -1,4 +1,8 @@
 # Danh mục Sự kiện (Event Catalog)
+
+## Event email đang chạy
+
+Identity phát `EmailVerificationRequestedEvent` (`identity.email.verification.requested`) với `customerId`, `email`, `verificationUrl`, `expiresAt`; sau khi xác minh phát `CustomerEmailVerifiedEvent` (`identity.email.verified`) với `customerId`, `email`, `verifiedAt`. Order phát `OrderEmailRecipientRegisteredEvent` (`notification.order.recipient`) với `orderId`, `customerId`, `email` chụp tại thời điểm tạo đơn. Cả ba dùng envelope `eventId`, `eventType`, `timestamp`, `data` và Outbox. Notification tiêu thụ các event này cùng bảy event đơn hàng và thanh toán đã có để gửi SMTP; chi tiết tại [email giao dịch](email-delivery.md).
 > Runtime hiện dùng ID số dạng chuỗi cho orderId/customerId (ví dụ "123", "42"); các ID có tiền tố trong ví dụ dưới đây thuộc thiết kế ban đầu. Payment hỗ trợ mock và payOS; xem [luồng payOS](payos-integration.md).
 
 ## Các Luồng Bất đồng bộ & Cấu trúc Sự kiện

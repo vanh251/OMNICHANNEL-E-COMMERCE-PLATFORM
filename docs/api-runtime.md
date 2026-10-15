@@ -1,5 +1,7 @@
 # API đang triển khai
 
+**Email giao dịch:** `POST /api/auth/register` trả `emailVerified=false` và gửi liên kết xác minh qua SMTP. `GET /api/auth/verify-email?token=...` xác minh liên kết một lần (24 giờ); `POST /api/auth/resend-verification` yêu cầu Bearer JWT, giới hạn một lần/phút và năm lần/ngày, trả 202 hoặc 429. `POST /api/auth/login` và `GET /api/users/me` trả thêm `emailVerified`. Tài khoản chưa xác minh vẫn được đặt hàng; thư đơn hàng chờ tối đa bảy ngày. Xem [cấu hình email](email-delivery.md).
+
 Gateway local: `http://localhost:8080`. Prefix thực tế là `/api`, không có `/v1`.
 Success trả DTO trực tiếp (hoặc list DTO), chưa dùng envelope `success/data` đồng nhất.
 Tài liệu này ghi nhận implementation; không thay đổi API contract bằng cách thêm wrapper.
@@ -30,7 +32,7 @@ Tài liệu này ghi nhận implementation; không thay đổi API contract bằ
 | POST | `/api/payments/webhooks/payos` | Chế độ payos; công khai, SDK xác minh chữ ký; ACK 200 |
 | GET | `/api/payments/payos/return`, `/api/payments/payos/cancel` | Chế độ payos; hướng dẫn kiểm tra trạng thái; không đổi trạng thái từ query string |
 
-Luồng giao hàng: thanh toán thành công đưa đơn từ PENDING sang CONFIRMED; ADMIN bắt đầu giao; khách hàng chủ đơn xác nhận đã nhận. Hai API chuyển trạng thái dùng transaction và khóa đơn, ghi lịch sử và Outbox cùng trạng thái. Gọi lặp lại hoặc sai trạng thái trả 409; sai quyền trả 403; không có đơn trả 404. Sự kiện `OrderShippedEvent` (`order.shipped`) và `OrderCompletedEvent` (`order.completed`) được Notification Service ghi log thông báo mô phỏng. Không tự động hoàn tất và không thay đổi tồn kho tại hai bước giao hàng.
+Luồng giao hàng: thanh toán thành công đưa đơn từ PENDING sang CONFIRMED; ADMIN bắt đầu giao; khách hàng chủ đơn xác nhận đã nhận. Hai API chuyển trạng thái dùng transaction và khóa đơn, ghi lịch sử và Outbox cùng trạng thái. Gọi lặp lại hoặc sai trạng thái trả 409; sai quyền trả 403; không có đơn trả 404. Sự kiện `OrderShippedEvent` (`order.shipped`) và `OrderCompletedEvent` (`order.completed`) được Notification Service gửi email đến địa chỉ đã xác minh. Không tự động hoàn tất và không thay đổi tồn kho tại hai bước giao hàng.
 
 Ví dụ request tạo order, dùng ID/SKU sản phẩm đã có inventory trong Order:
 
@@ -48,7 +50,7 @@ Khi tạo product, `active=false` cho đến khi Order/Inventory tạo inventory
 
 Product lưu sự kiện đồng bộ ngay trong document MongoDB, publisher gửi lại khi RabbitMQ gián đoạn. Consumer của Order/Inventory chỉ insert SKU chưa có, không ghi đè tồn của SKU đã giao dịch; xác nhận được ghi vào outbox PostgreSQL. Queue lỗi cần đối soát: `catalog.inventory.sync.dlq` và `catalog.inventory.synced.dlq`. Với product đã tồn tại trước thay đổi này, bật `CATALOG_INVENTORY_BACKFILL_ENABLED=true` khi triển khai để xếp chúng vào luồng đồng bộ; các product đó tạm `active=false` đến khi nhận xác nhận. Index `unique_variant_sku` chỉ áp dụng cho product mới (`skuIndexEligible=true`) để dữ liệu cũ có SKU trùng không chặn khởi động; vẫn cần đối soát SKU trùng cũ trước khi mở rộng ràng buộc cho toàn bộ catalog.
 
-Luồng chính tự tạo payment qua `OrderCreatedEvent`; không gọi thêm POST payment để hoàn tất Saga. Chế độ mock: amount ≤ 10000 thành công, > 10000 thất bại. Chế độ payos: Payment giữ PENDING, trả checkoutUrl/qrCode/expiresAt và chờ tiền được xác minh. GET payment dùng ID số của order chuyển thành string, không dùng providerOrderCode. Notification chỉ ghi log, chưa có REST API dù Gateway đã có route `/api/notifications/**`.
+Luồng chính tự tạo payment qua `OrderCreatedEvent`; không gọi thêm POST payment để hoàn tất Saga. Chế độ mock: amount ≤ 10000 thành công, > 10000 thất bại. Chế độ payos: Payment giữ PENDING, trả checkoutUrl/qrCode/expiresAt và chờ tiền được xác minh. GET payment dùng ID số của order chuyển thành string, không dùng providerOrderCode. Notification gửi SMTP và lưu trạng thái job trong MongoDB; chưa có REST API dù Gateway đã có route `/api/notifications/**`.
 
 Product/Payment tự kiểm tra JWT do Identity cấp, yêu cầu chữ ký HS256 hợp lệ, hạn dùng, userId và role. Thiếu/token sai trả 401; USER gọi thao tác ADMIN hoặc đọc payment người khác trả 403. Payment cũ chưa có customerId chỉ ADMIN được đọc.
 
