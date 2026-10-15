@@ -103,6 +103,58 @@ class ProductInventorySyncTest {
                 any(FindAndModifyOptions.class), org.mockito.ArgumentMatchers.eq(Product.class));
     }
 
+    @Test
+    void editingExistingSkuCanOmitStockAndPreservesInitialQuantity() {
+        Product existing = Product.builder().id("product-1").active(true)
+                .variants(List.of(ProductVariant.builder().sku("SKU-1").stock(8).build())).build();
+        when(products.findById("product-1")).thenReturn(Optional.of(existing));
+        when(categories.findById("cat")).thenReturn(Optional.of(Category.builder().id("cat").name("Phones").build()));
+        when(products.findByVariantSku("SKU-1")).thenReturn(Optional.of(existing));
+        when(mongoTemplate.findAndModify(any(Query.class), any(Update.class),
+                any(FindAndModifyOptions.class), org.mockito.ArgumentMatchers.eq(Product.class)))
+                .thenReturn(existing);
+        ProductRequest request = request(" SKU-1 ", 8);
+        request.getVariants().get(0).setStock(null);
+
+        service.updateProduct("product-1", request);
+
+        org.mockito.ArgumentCaptor<Update> changes = org.mockito.ArgumentCaptor.forClass(Update.class);
+        verify(mongoTemplate).findAndModify(any(Query.class), changes.capture(),
+                any(FindAndModifyOptions.class), org.mockito.ArgumentMatchers.eq(Product.class));
+        org.bson.Document fields = changes.getValue().getUpdateObject().get("$set", org.bson.Document.class);
+        List<?> variants = fields.getList("variants", ProductVariant.class);
+        ProductVariant variant = (ProductVariant) variants.get(0);
+        assertThat(variant.getStock()).isEqualTo(8);
+        assertThat(variant.getSku()).isEqualTo("SKU-1");
+        assertThat(fields).doesNotContainKeys("active", "inventorySyncEventId", "inventorySyncPublished");
+    }
+
+    @Test
+    void newProductStillRequiresInitialStock() {
+        when(categories.findById("cat")).thenReturn(Optional.of(Category.builder().id("cat").name("Phones").build()));
+        ProductRequest request = request("SKU-1", 8);
+        request.getVariants().get(0).setStock(null);
+
+        assertThatThrownBy(() -> service.createProduct(request))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("initial stock is required");
+        verify(products, never()).save(any());
+    }
+
+    @Test
+    void addingNewSkuWithoutInitialStockIsRejected() {
+        Product existing = Product.builder().id("product-1")
+                .variants(List.of(ProductVariant.builder().sku("SKU-1").stock(8).build())).build();
+        when(products.findById("product-1")).thenReturn(Optional.of(existing));
+        when(categories.findById("cat")).thenReturn(Optional.of(Category.builder().id("cat").name("Phones").build()));
+        ProductRequest request = request("SKU-2", 8);
+        request.getVariants().get(0).setStock(null);
+
+        assertThatThrownBy(() -> service.updateProduct("product-1", request))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("initial stock is required");
+        verify(mongoTemplate, never()).findAndModify(any(Query.class), any(Update.class),
+                any(FindAndModifyOptions.class), org.mockito.ArgumentMatchers.eq(Product.class));
+    }
+
     private ProductRequest request(String sku, int stock) {
         return ProductRequest.builder().name("Phone").categoryId("cat")
                 .variants(List.of(ProductVariantDTO.builder().sku(sku).name("Black")

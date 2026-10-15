@@ -375,12 +375,41 @@ class ProductServiceIntegrationTest {
 
         // Update product name to WH-1000XM5
         request.setName("Sony WH-1000XM5");
+        variant.setStock(null);
         mockMvc.perform(put("/api/products/" + productId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id", is(productId)))
-                .andExpect(jsonPath("$.name", is("Sony WH-1000XM5")));
+                .andExpect(jsonPath("$.name", is("Sony WH-1000XM5")))
+                .andExpect(jsonPath("$.variants[0].stock", is(40)));
+    }
+
+    @Test
+    void newProductRequiresInitialStockAndCatalogCannotAdjustExistingStock() throws Exception {
+        Category category = categoryRepository.save(Category.builder().name("Stock-ownership").build());
+        ProductVariantDTO variant = ProductVariantDTO.builder().sku("STOCK-OWNER")
+                .name("Default").price(BigDecimal.TEN).build();
+        ProductRequest request = ProductRequest.builder().name("Stock test")
+                .categoryId(category.getId()).variants(List.of(variant)).build();
+
+        mockMvc.perform(post("/api/products").contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", containsString("initial stock is required")));
+
+        variant.setStock(10);
+        String response = mockMvc.perform(post("/api/products").contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        String id = objectMapper.readTree(response).path("id").asText();
+        variant.setStock(20);
+        mockMvc.perform(put("/api/products/{id}", id).contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", containsString("managed by inventory")));
+        mockMvc.perform(get("/api/products/{id}", id))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.variants[0].stock").value(10));
     }
 
     @Test
